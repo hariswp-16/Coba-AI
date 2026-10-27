@@ -353,7 +353,15 @@ export function ProjectEditor({ project: initial, style, styles, initialJob, lim
       <Modal open={previewOpen} onClose={() => setPreviewOpen(false)} title={project.videoUrl ? "Preview video" : "Pratinjau adegan"} wide>
         {project.videoUrl ? (
           <div className="space-y-3">
-            <video src={project.videoUrl} controls autoPlay className="mx-auto max-h-[66vh] rounded-xl bg-black" playsInline />
+            <video
+              src={project.videoUrl}
+              poster={project.thumbnailUrl ?? undefined}
+              controls
+              autoPlay
+              playsInline
+              preload="metadata"
+              className="mx-auto max-h-[66vh] w-full rounded-xl bg-black"
+            />
             <div className="flex flex-wrap justify-between gap-2 text-xs text-mist-400">
               <span>{formatDuration(project.durationSeconds)} · {project.width}×{project.height}</span>
               <div className="flex gap-2">

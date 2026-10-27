@@ -1,25 +1,47 @@
 import { guard, jsonError } from "@/lib/api";
 import { getAssetRow } from "@/lib/db/repo";
 import { storage } from "@/lib/storage";
+import { serveFile } from "@/lib/serve";
 
-export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
+/**
+ * Streams a stored asset. Supports HTTP Range so <video>/<audio> can seek and
+ * so Safari (which requires 206 responses) can play the MP4 at all.
+ */
+async function respond(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const denied = await guard();
   if (denied) return denied;
   const { id } = await ctx.params;
   const asset = getAssetRow(id);
   if (!asset) return jsonError("Asset tidak ditemukan", 404);
   const url = new URL(req.url);
-  const download = url.searchParams.get("download");
+  const driver = storage();
   try {
-    const buf = await storage().get(asset.storageKey);
-    const headers: Record<string, string> = {
-      "Content-Type": asset.mime,
-      "Content-Length": String(buf.length),
-      "Cache-Control": "private, max-age=3600",
-    };
-    if (download) headers["Content-Disposition"] = `attachment; filename="${asset.fileName.replace(/"/g, "")}"`;
-    return new Response(new Uint8Array(buf), { headers });
-  } catch {
+    let filePath: string | null = null;
+    try {
+      filePath = await driver.localPath(asset.storageKey);
+    } catch {
+      filePath = null;
+    }
+    const buffer = filePath ? null : await driver.get(asset.storageKey);
+    return await serveFile({
+      filePath,
+      buffer,
+      contentType: asset.mime,
+      fileName: asset.fileName,
+      download: Boolean(url.searchParams.get("download")),
+      rangeHeader: req.headers.get("range"),
+    });
+  } catch (err) {
+    console.error("[assets] gagal menyajikan file", asset.storageKey, err);
     return jsonError("File tidak tersedia", 404);
   }
+}
+
+export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  return respond(req, ctx);
+}
+
+export async function HEAD(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const res = await respond(req, ctx);
+  return new Response(null, { status: res.status, headers: res.headers });
 }

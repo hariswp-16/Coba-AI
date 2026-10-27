@@ -211,7 +211,7 @@ export function DashboardClient({ initialProjects, queue, integrations }: Props)
       <Modal open={Boolean(player)} onClose={() => setPlayer(null)} title={player?.title ?? "Preview"} wide>
         {player?.videoUrl ? (
           <div className="space-y-3">
-            <video src={player.videoUrl} controls className="mx-auto max-h-[70vh] rounded-xl bg-black" playsInline />
+            <VideoPlayer src={player.videoUrl} poster={player.thumbnailUrl} title={player.title} />
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-mist-400">
               <span>
                 {player.width}×{player.height} · {player.fps} fps · {formatDuration(player.durationSeconds)}
@@ -250,6 +250,32 @@ export function DashboardClient({ initialProjects, queue, integrations }: Props)
 
       {toast && <Toast message={toast.message} tone={toast.tone} onClose={() => setToast(null)} />}
     </div>
+  );
+}
+
+function VideoPlayer({ src, poster, title }: { src: string; poster?: string | null; title: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <div className="rounded-xl border border-amber-400/25 bg-amber-400/[0.06] p-5 text-center text-sm text-amber-100/90">
+        <p className="font-semibold">Browser tidak bisa memutar video ini secara langsung.</p>
+        <p className="mt-1 text-xs text-amber-100/70">Unduh MP4-nya untuk diputar di pemutar video perangkatmu.</p>
+        <a className="btn-primary mt-3" href={`${src}?download=1`}>
+          <Download className="h-4 w-4" /> Unduh {title}.mp4
+        </a>
+      </div>
+    );
+  }
+  return (
+    <video
+      src={src}
+      poster={poster ?? undefined}
+      controls
+      playsInline
+      preload="metadata"
+      onError={() => setFailed(true)}
+      className="mx-auto max-h-[70vh] w-full rounded-xl bg-black"
+    />
   );
 }
 
