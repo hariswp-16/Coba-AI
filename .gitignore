@@ -1,0 +1,23 @@
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# local data & generated media
+data/*.db
+data/*.db-*
+storage/
+public/preview/*
+!public/preview/.gitkeep
+
+# uploads / reference material
+google_drive/
+
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+tsconfig.tsbuildinfo
+next-env.d.ts
