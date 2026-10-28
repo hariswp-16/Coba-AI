@@ -1,5 +1,6 @@
 import type { CharacterSpec } from "../types";
 import { Ctx, rgba, shade, roundRect, clamp } from "./geometry";
+import { RIG, LEG_TOTAL } from "./rig";
 
 export type MouthShape = "neutral" | "sad" | "worried" | "open" | "smile" | "angry" | "shock" | "flat";
 
@@ -18,6 +19,8 @@ export interface Pose {
   blink: number;
   crouch: number;
   sit: number;
+  /** vertical offset of the hips, in height units (+ = up); keeps a gait bob without lifting the feet */
+  bob: number;
 }
 
 export interface CharacterDrawOptions {
@@ -41,6 +44,9 @@ export interface CharacterAnchors {
   headTop: { x: number; y: number };
   handNear: { x: number; y: number };
   handFar: { x: number; y: number };
+  footNear: { x: number; y: number };
+  footFar: { x: number; y: number };
+  hip: { x: number; y: number };
   feetY: number;
   bounds: { x0: number; y0: number; x1: number; y1: number };
 }
@@ -75,23 +81,27 @@ export function drawCharacter(
   const headR = h * (isChild ? 0.15 : 0.128);
   const headH = headR * (isChild ? 2.2 : 2.1);
   const headW = headR * (isChild ? 1.82 : 1.68);
-  const torsoLen = h * 0.25;
-  const neckLen = h * 0.025;
+  // limb metrics live in rig.ts; poses.ts solves the very same numbers with IK
+  const torsoLen = h * RIG.torso;
+  const neckLen = h * RIG.neck;
   const hipW = h * 0.058;
   const shoulderW = h * 0.075;
   const limbW = Math.max(7, h * 0.042);
-  const armLen = h * 0.135;
-  const foreArmLen = h * 0.115;
-  const thighLen = h * 0.125;
-  const shinLen = h * 0.125;
+  const armLen = h * RIG.upperArm;
+  const foreArmLen = h * RIG.foreArm;
+  const thighLen = h * RIG.thigh;
+  const shinLen = h * RIG.shin;
   const jointR = limbW * 0.68;
 
-  const pose = opt.pose;
+  const pose = sanitizePose(opt.pose);
   const facing = opt.facing;
 
   // Root (hips) position: legs extend down from hips to ground.
   const legTotal = thighLen + shinLen;
-  const hipY = opt.groundY - legTotal * (1 - pose.crouch * 0.42) - pose.sit * legTotal * 0.42;
+  // A sitting character's hips must come *down*: the old formula subtracted the
+  // sit term too and left every seated pose hovering above the floor.
+  const sink = clamp(pose.crouch, 0, 1) * RIG.hipDrop + clamp(pose.sit, 0, 1) * RIG.hipDrop;
+  const hipY = opt.groundY - legTotal * (1 - sink) - (pose.bob || 0) * h;
 
   ctx.save();
   ctx.translate(opt.x, hipY);
@@ -145,10 +155,38 @@ export function drawCharacter(
   const footNear = solveLimb({ x: hipW * 0.4, y: 0 }, pose.legNear[0], thighLen, pose.legNear[1], shinLen);
   const footFar = solveLimb({ x: -hipW * 0.4, y: 0 }, pose.legFar[0], thighLen, pose.legFar[1], shinLen);
 
-  // ---------- FAR limbs ----------
+  const farArm: ArmSpec = {
+    shoulder: { x: shoulder.x - shoulderW * 0.82, y: shoulder.y + torsoLen * 0.02 },
+    a1: pose.armFar[0] + lean,
+    len1: armLen,
+    a2: pose.armFar[1],
+    len2: foreArmLen,
+    width: limbW * 0.8,
+    color: shade(skin, -0.14),
+    handColor: shade(skin, -0.18),
+    jointR: jointR * 0.72,
+    sleeveColor: shade(shirt, -0.18),
+  };
+  const nearArm: ArmSpec = {
+    shoulder: { x: shoulder.x + shoulderW * 0.82, y: shoulder.y + torsoLen * 0.02 },
+    a1: pose.armNear[0] + lean,
+    len1: armLen,
+    a2: pose.armNear[1],
+    len2: foreArmLen,
+    width: limbW * 0.86,
+    color: skin,
+    handColor: skin,
+    jointR: jointR * 0.8,
+    sleeveColor: shirt,
+  };
+
+  // ---------- FAR limbs (fully behind the body) ----------
   drawLimb(ctx, { x: -hipW * 0.4, y: 0 }, pose.legFar[0], thighLen, pose.legFar[1], shinLen, limbW * 0.92, shade(pants, -0.18), shade(pants, -0.25), jointR * 0.85);
   drawFoot(ctx, footFar, limbW, shade("#20242a", -0.15), facing);
-  drawArm(ctx, { x: shoulder.x - shoulderW * 0.82, y: shoulder.y + torsoLen * 0.02 }, pose.armFar[0] + lean, armLen, pose.armFar[1], foreArmLen, limbW * 0.8, shade(skin, -0.14), shade(skin, -0.18), jointR * 0.72, shade(shirt, -0.18), h);
+  drawArm(ctx, farArm, "upper");
+  drawArm(ctx, farArm, "lower");
+  // the near upper arm also tucks behind the torso
+  drawArm(ctx, nearArm, "upper");
 
   // ---------- SKIRT (female) ----------
   if (isWoman && detail > 0.5) {
@@ -246,7 +284,8 @@ export function drawCharacter(
     gender: opt.gender ?? spec.gender,
   });
 
-  drawArm(ctx, { x: shoulder.x + shoulderW * 0.82, y: shoulder.y + torsoLen * 0.02 }, pose.armNear[0] + lean, armLen, pose.armNear[1], foreArmLen, limbW * 0.86, skin, skin, jointR * 0.8, shirt, h);
+  // forearm + hand stay in front so gestures can read over the chest and face
+  drawArm(ctx, nearArm, "lower");
 
   // held item in near hand
   if (opt.heldItem && opt.heldItem !== "none") {
@@ -273,6 +312,9 @@ export function drawCharacter(
     headTop: { x: opt.x + headCenter.x * facing, y: hipY + headCenter.y - headH * 0.5 },
     handNear: { x: opt.x + handNear.x * facing, y: hipY + handNear.y },
     handFar: { x: opt.x + handFar.x * facing, y: hipY + handFar.y },
+    footNear: { x: opt.x + footNear.x * facing, y: hipY + footNear.y },
+    footFar: { x: opt.x + footFar.x * facing, y: hipY + footFar.y },
+    hip: { x: opt.x, y: hipY },
     feetY: opt.groundY,
     bounds: {
       x0: opt.x - Math.abs(bodyW) / 2 - 10,
@@ -325,45 +367,61 @@ function drawLimb(
   ctx.restore();
 }
 
-function drawArm(
-  ctx: Ctx,
-  shoulder: { x: number; y: number },
-  a1: number,
-  len1: number,
-  a2: number,
-  len2: number,
-  width: number,
-  color: string,
-  handColor: string,
-  jointR: number,
-  sleeveColor: string,
-  h: number
-) {
-  const { joint, ...end } = solveLimb(shoulder, a1, len1, a2, len2);
+type ArmPass = "upper" | "lower";
+
+interface ArmSpec {
+  shoulder: { x: number; y: number };
+  a1: number;
+  len1: number;
+  a2: number;
+  len2: number;
+  width: number;
+  color: string;
+  handColor: string;
+  jointR: number;
+  sleeveColor: string;
+}
+
+/**
+ * Arms are drawn in two passes. The upper arm goes *behind* the torso and the
+ * forearm/hand in front of it, which is how a flat 2D character keeps the
+ * shoulder joint hidden instead of painting a skin-coloured stripe over the
+ * shirt (the old single-pass draw made every arm look like a tear in the
+ * clothing).
+ */
+function drawArm(ctx: Ctx, spec: ArmSpec, pass: ArmPass) {
+  const { joint, ...end } = solveLimb(spec.shoulder, spec.a1, spec.len1, spec.a2, spec.len2);
   ctx.save();
   ctx.lineCap = "round";
-  // sleeve
-  ctx.strokeStyle = sleeveColor;
-  ctx.lineWidth = width * 1.5;
-  ctx.beginPath();
-  ctx.moveTo(shoulder.x, shoulder.y);
-  ctx.lineTo(shoulder.x + Math.sin(a1) * len1 * 0.42, shoulder.y + Math.cos(a1) * len1 * 0.42);
-  ctx.stroke();
-  // arm
-  ctx.strokeStyle = color;
-  ctx.lineWidth = width;
-  ctx.beginPath();
-  ctx.moveTo(shoulder.x + Math.sin(a1) * len1 * 0.3, shoulder.y + Math.cos(a1) * len1 * 0.3);
-  ctx.lineTo(joint.x, joint.y);
-  ctx.lineTo(end.x, end.y);
-  ctx.stroke();
-  ctx.fillStyle = handColor;
-  ctx.beginPath();
-  ctx.arc(joint.x, joint.y, jointR, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(end.x, end.y, width * 0.72, 0, Math.PI * 2);
-  ctx.fill();
+  if (pass === "upper") {
+    ctx.strokeStyle = spec.sleeveColor;
+    ctx.lineWidth = spec.width * 1.5;
+    ctx.beginPath();
+    ctx.moveTo(spec.shoulder.x, spec.shoulder.y);
+    ctx.lineTo(spec.shoulder.x + Math.sin(spec.a1) * spec.len1 * 0.42, spec.shoulder.y + Math.cos(spec.a1) * spec.len1 * 0.42);
+    ctx.stroke();
+    ctx.strokeStyle = spec.color;
+    ctx.lineWidth = spec.width;
+    ctx.beginPath();
+    ctx.moveTo(spec.shoulder.x + Math.sin(spec.a1) * spec.len1 * 0.3, spec.shoulder.y + Math.cos(spec.a1) * spec.len1 * 0.3);
+    ctx.lineTo(joint.x, joint.y);
+    ctx.stroke();
+    ctx.fillStyle = spec.handColor;
+    ctx.beginPath();
+    ctx.arc(joint.x, joint.y, spec.jointR, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.strokeStyle = spec.color;
+    ctx.lineWidth = spec.width;
+    ctx.beginPath();
+    ctx.moveTo(joint.x, joint.y);
+    ctx.lineTo(end.x, end.y);
+    ctx.stroke();
+    ctx.fillStyle = spec.handColor;
+    ctx.beginPath();
+    ctx.arc(end.x, end.y, spec.width * 0.72, 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.restore();
 }
 
@@ -427,14 +485,16 @@ function drawHead(
     hoodGrad.addColorStop(0, shade(hij, 0.16));
     hoodGrad.addColorStop(0.55, hij);
     hoodGrad.addColorStop(1, shade(hij, -0.28));
-    // hood + drape to the shoulders
+    // Hood + shoulder drape. The drape used to fall to hip level and turned the
+    // character into a cone that hid both arms: it now stops just below the
+    // shoulder line so hands stay readable in every gesture.
     ctx.beginPath();
-    ctx.moveTo(-headW * 0.52, headH * 0.22);
-    ctx.quadraticCurveTo(-headW * 0.78, -headH * 0.62, 0, -headH * 0.72);
-    ctx.quadraticCurveTo(headW * 0.78, -headH * 0.62, headW * 0.52, headH * 0.22);
-    ctx.quadraticCurveTo(headW * 0.86, headH * 0.75, headW * 0.98, headH * 1.28);
-    ctx.quadraticCurveTo(0, headH * 1.5, -headW * 0.98, headH * 1.28);
-    ctx.quadraticCurveTo(-headW * 0.86, headH * 0.75, -headW * 0.52, headH * 0.22);
+    ctx.moveTo(-headW * 0.52, headH * 0.2);
+    ctx.quadraticCurveTo(-headW * 0.8, -headH * 0.62, 0, -headH * 0.74);
+    ctx.quadraticCurveTo(headW * 0.8, -headH * 0.62, headW * 0.52, headH * 0.2);
+    ctx.quadraticCurveTo(headW * 0.7, headH * 0.5, headW * 0.76, headH * 0.95);
+    ctx.quadraticCurveTo(0, headH * 1.1, -headW * 0.76, headH * 0.95);
+    ctx.quadraticCurveTo(-headW * 0.7, headH * 0.5, -headW * 0.52, headH * 0.2);
     ctx.closePath();
     ctx.fillStyle = hoodGrad;
     ctx.fill();
@@ -456,10 +516,10 @@ function drawHead(
     ctx.strokeStyle = rgba(shade(hij, -0.45), 0.35);
     ctx.lineWidth = Math.max(1, headH * 0.012);
     ctx.beginPath();
-    ctx.moveTo(-headW * 0.66, headH * 0.5);
-    ctx.quadraticCurveTo(-headW * 0.8, headH * 0.9, -headW * 0.72, headH * 1.2);
-    ctx.moveTo(headW * 0.66, headH * 0.5);
-    ctx.quadraticCurveTo(headW * 0.8, headH * 0.9, headW * 0.72, headH * 1.2);
+    ctx.moveTo(-headW * 0.6, headH * 0.36);
+    ctx.quadraticCurveTo(-headW * 0.68, headH * 0.56, -headW * 0.62, headH * 0.74);
+    ctx.moveTo(headW * 0.6, headH * 0.36);
+    ctx.quadraticCurveTo(headW * 0.68, headH * 0.56, headW * 0.62, headH * 0.74);
     ctx.stroke();
   } else if (o.hairStyle === "botak") {
     // nothing
@@ -642,4 +702,38 @@ function drawHeldItem(ctx: Ctx, item: string, hand: { x: number; y: number }, li
     ctx.restore();
   }
   ctx.restore();
+}
+
+/**
+ * Last line of defence for the rig: a single NaN anywhere upstream used to
+ * blank the whole canvas. Non-finite joints fall back to the resting pose so a
+ * bad frame can only look stiff, never corrupt the render.
+ */
+function sanitizePose(pose: Pose): Pose {
+  const bad =
+    !Number.isFinite(pose.lean) ||
+    !Number.isFinite(pose.headTilt) ||
+    !Number.isFinite(pose.headTurn) ||
+    !Number.isFinite(pose.brow) ||
+    !Number.isFinite(pose.blink) ||
+    !pose.armNear.every(Number.isFinite) ||
+    !pose.armFar.every(Number.isFinite) ||
+    !pose.legNear.every(Number.isFinite) ||
+    !pose.legFar.every(Number.isFinite);
+  if (!bad) return pose;
+  return {
+    ...pose,
+    lean: 0,
+    headTilt: 0,
+    headTurn: 0,
+    brow: 0,
+    blink: 0,
+    armNear: [0.06, 0.08],
+    armFar: [-0.06, 0.08],
+    legNear: [0.02, 0.02],
+    legFar: [-0.02, 0.02],
+    crouch: 0,
+    sit: 0,
+    bob: 0,
+  };
 }

@@ -5,7 +5,7 @@ import { spawn } from "node:child_process";
 import { createCanvas, type Canvas } from "@napi-rs/canvas";
 import { ffmpegPath, runFfmpeg } from "../ffmpeg";
 import { ensureFonts } from "./fonts";
-import { renderSceneFrame, type SceneRenderSpec, type StageCharacter } from "../anim/sceneRenderer";
+import { renderSceneFrame, resetMotionState, type SceneRenderSpec, type StageCharacter } from "../anim/sceneRenderer";
 import { buildTimeline, transitionWindows, type TimedScene } from "./timeline";
 import type { CharacterSpec, Scene, StoryDoc, StyleProfileSpec, SubtitleStyle, HudStyle } from "../types";
 import { hashString, clamp, smoothstep, mulberry32 } from "../anim/geometry";
@@ -71,6 +71,8 @@ function sceneSpec(o: FrameRenderOptions, scene: TimedScene, image: import("@nap
  */
 export async function renderVideoTrack(o: FrameRenderOptions, outPath: string): Promise<FrameRenderResult> {
   ensureFonts();
+  // every render starts from a clean spring state so output is reproducible
+  resetMotionState();
   const started = Date.now();
   const timelineMs = o.durationMs;
   const fps = o.fps;
@@ -338,28 +340,38 @@ function buildStaging(scene: TimedScene, style: StyleProfileSpec, all: TimedScen
   const framing = pickFraming(scene, rnd);
   if (framing === "solo") {
     const hero = cast[0] ?? chars[0];
-    return hero
-      ? [
-          {
-            id: hero.id,
-            x: 340 + Math.round(rnd() * 60),
-            action: scene.purpose === "klimaks" ? "scared" : baseAction,
-            facing: rnd() > 0.5 ? 1 : -1,
-            heldItem: "none",
-            scale: 1.28,
-            enterDelayMs: 0,
-          },
-        ]
-      : [];
+    if (!hero) return [];
+    const soloAction = scene.purpose === "klimaks" ? "scared" : baseAction;
+    const soloX = 340 + Math.round(rnd() * 60);
+    const soloFacing: 1 | -1 = soloX >= 360 ? 1 : -1;
+    return [
+      {
+        id: hero.id,
+        x: soloX,
+        xTo:
+          soloAction === "walk" || soloAction === "run"
+            ? clamp(soloX + soloFacing * (soloAction === "run" ? 150 : 115), 110, 610)
+            : undefined,
+        action: soloAction,
+        facing: soloFacing,
+        heldItem: "none",
+        scale: 1.28,
+        enterDelayMs: 0,
+      },
+    ];
   }
 
   const n = Math.max(1, Math.min(3, framing === "duo" ? Math.min(2, cast.length) : cast.length));
   const chosen = cast.slice(0, n);
-  const baseX = 340 + Math.round(rnd() * 40);
-  // Characters are ~150 px wide at this scale, so the gap must stay well above
-  // that when two of them share the frame.
-  const spread = framing === "duo" ? 150 : 130;
-  const centered = (i: number) => baseX + (i - (n - 1) / 2) * spread * 2;
+  const baseX = 360;
+  // A walker must not stroll through a neighbour: aim it at the open side.
+  const groupCentre = baseX;
+  // Silhouettes (hijab, shoulders, an extended arm) run ~150-180 px wide at
+  // this scale, so the gap has to clear that or the cast merges into one blob.
+  // Two characters sit 210 px apart, three sit 165 px apart inside the safe
+  // area so nobody gets clipped by the frame edge.
+  const spread = n >= 3 ? 165 : n === 2 ? 210 : 0;
+  const centered = (i: number) => baseX + (i - (n - 1) / 2) * spread;
   return chosen.map((c, i) => {
     let action = baseAction;
     if (c.age === "anak" && action === "scared") action = "cry";
@@ -369,12 +381,26 @@ function buildStaging(scene: TimedScene, style: StyleProfileSpec, all: TimedScen
     // arms) are ~150 px wide, so larger random offsets made characters overlap.
     const jitter = Math.round((rnd() - 0.5) * 12);
     const depth = framing === "crowd" && i === 2 ? 0.88 : 1;
+    const x = clamp(centered(i) + jitter, 120, 600);
+    // standing characters face each other; walkers head for the open edge so
+    // they never stroll through a neighbour, and always face where they walk
+    const outward: 1 | -1 = x >= groupCentre ? 1 : -1;
+    const inward: 1 | -1 = x <= groupCentre ? 1 : -1;
+    const locomotion = action === "walk" || action === "run";
+    const travel = action === "run" ? 150 : 115;
+    const roomOut = outward > 0 ? 610 - x : x - 110;
+    const walkDir: 1 | -1 = roomOut >= 60 ? outward : inward === outward ? outward : (-outward as 1 | -1);
+    const facing: 1 | -1 = locomotion ? walkDir : inward;
+    // every gait needs a destination: a walk played in place is exactly the
+    // foot-skating this rewrite is meant to remove
+    const roomAhead = walkDir > 0 ? 610 - x : x - 110;
+    const xTo = locomotion ? clamp(x + walkDir * Math.min(travel, roomAhead), 110, 610) : undefined;
     return {
       id: c.id,
-      x: clamp(centered(i) + jitter, 110, 610),
-      xTo: action === "walk" ? clamp(centered(i) + (rnd() > 0.5 ? 60 : -60), 110, 610) : undefined,
+      x,
+      xTo,
       action,
-      facing: (i === 0 ? 1 : -1) as 1 | -1,
+      facing,
       heldItem: "none",
       scale: (isChild ? 0.92 : 1) * depth,
       enterDelayMs: i * 120,

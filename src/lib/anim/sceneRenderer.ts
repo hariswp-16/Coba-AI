@@ -1,8 +1,9 @@
 import { createCanvas, type Canvas, type Image } from "@napi-rs/canvas";
 import type { CharacterSpec, HudStyle, SceneWord, StyleProfileSpec, SubtitleStyle, PaletteSpec } from "../types";
-import { Ctx, Rect, clamp, hashString, mulberry32, rgba, shade, smoothstep } from "./geometry";
+import { Ctx, Rect, clamp, easeOutCubic, hashString, mulberry32, rgba, shade, smoothstep } from "./geometry";
 import { drawCharacter, type CharacterAnchors, type Pose } from "./character";
-import { ACTIONS, Action, makePose, mouthForMood } from "./poses";
+import { ACTIONS, Action, mouthForMood } from "./poses";
+import { CharacterMotion } from "./motion";
 import { getEnvironment, resolveLocation, type EnvironmentDef, type LocationKey } from "./environments";
 import { drawAtmosphere } from "./atmosphere";
 import { applyCamera, cameraAt, type CameraMove } from "./camera";
@@ -139,7 +140,7 @@ export function renderSceneFrame(ctx: Ctx, spec: SceneRenderSpec, tMs: number): 
 
   // ---------- background ----------
   if (spec.image) {
-    drawImageBackdrop(ctx, spec.image, cam, w, h, tMs);
+    drawImageBackdrop(ctx, spec.image, cam, w, h);
   } else {
     applyCamera(ctx as unknown as Parameters<typeof applyCamera>[0], cam, w, h, 0.55);
     // prepared.bg is already rasterised at w×h, so it must be blitted 1:1.
@@ -179,8 +180,17 @@ export function renderSceneFrame(ctx: Ctx, spec: SceneRenderSpec, tMs: number): 
     env.drawForeground?.(ectx);
     ctx.restore();
 
+    // anchors come back in 720-wide scene units (that is how drawCast was
+    // scaled); the subtitle pass works in output pixels, so convert here or a
+    // 1080p render computes its face-clearance against the wrong rectangle
+    const anchorScale = w / 720;
     for (const a of anchors) {
-      headRects.push({ x: a.head.x - a.head.r * 0.95, y: a.head.y - a.head.r, w: a.head.r * 1.9, h: a.head.r * 2 });
+      headRects.push({
+        x: (a.head.x - a.head.r * 0.95) * anchorScale,
+        y: (a.head.y - a.head.r) * anchorScale,
+        w: a.head.r * 1.9 * anchorScale,
+        h: a.head.r * 2 * anchorScale,
+      });
     }
   } else {
     // atmosphere over AI stills so scenes still feel alive
@@ -199,18 +209,14 @@ export function renderSceneFrame(ctx: Ctx, spec: SceneRenderSpec, tMs: number): 
     ctx.restore();
   }
 
-  // ---------- opening flash / fade ----------
-  ctx.save();
-  const fadeIn = 220;
-  const fadeOut = 180;
+  // ---------- opening fade ----------
+  const fadeIn = 240;
   if (spec.index === 0 && tMs < fadeIn) {
-    ctx.fillStyle = `rgba(0,0,0,${1 - tMs / fadeIn})`;
+    ctx.save();
+    ctx.fillStyle = `rgba(0,0,0,${1 - smoothstep(tMs / fadeIn)})`;
     ctx.fillRect(0, 0, w, h);
+    ctx.restore();
   }
-  if (tMs > spec.durationMs - fadeOut) {
-    ctx.globalAlpha = 1;
-  }
-  ctx.restore();
 
   // ---------- grade ----------
   ctx.save();
@@ -219,7 +225,7 @@ export function renderSceneFrame(ctx: Ctx, spec: SceneRenderSpec, tMs: number): 
     vignette: spec.style.lighting.vignette,
     grain: spec.style.lighting.grain,
     warm: spec.timeOfDay === "malam" ? nightFactor * 2.4 : spec.timeOfDay === "sore" ? 0.07 : 0.01,
-    seed: Math.floor(tMs / 60),
+    seed: Math.floor(tMs / 33),
   });
   ctx.restore();
 
@@ -310,17 +316,19 @@ function drawHeadline(ctx: Ctx, text: string, w: number, h: number, alpha: numbe
   ctx.restore();
 }
 
-function drawImageBackdrop(ctx: Ctx, image: Image, cam: { x: number; y: number; scale: number; rotation: number }, w: number, h: number, tMs: number) {
+function drawImageBackdrop(ctx: Ctx, image: Image, cam: { x: number; y: number; scale: number; rotation: number }, w: number, h: number) {
   const imgW = image.width || w;
   const imgH = image.height || h;
   const scaleCover = Math.max(w / imgW, h / imgH);
-  const zoom = 1.05 + (cam.scale - 1) * 0.9 + Math.sin(tMs / 5200) * 0.008;
+  // A slow "breathing" zoom on a still image reads as a rendering fault, so the
+  // only motion here is the camera move itself.
+  const zoom = 1.06 + (cam.scale - 1) * 0.9;
   const drawW = imgW * scaleCover * zoom;
   const drawH = imgH * scaleCover * zoom;
-  const dx = (w - drawW) / 2 + cam.x * 0.8;
-  const dy = (h - drawH) / 2 + cam.y * 0.8;
   ctx.save();
-  ctx.drawImage(image, dx, dy, drawW, drawH);
+  ctx.translate(w / 2 + cam.x * 0.8, h / 2 + cam.y * 0.8);
+  if (cam.rotation) ctx.rotate(cam.rotation * 0.8);
+  ctx.drawImage(image, -drawW / 2, -drawH / 2, drawW, drawH);
   // cinematic falloff so subtitles read well
   const g = ctx.createLinearGradient(0, h * 0.45, 0, h);
   g.addColorStop(0, "rgba(0,0,0,0)");
@@ -336,50 +344,128 @@ function drawImageBackdrop(ctx: Ctx, image: Image, cam: { x: number; y: number; 
   ctx.restore();
 }
 
+const motionRegistry = new Map<string, CharacterMotion>();
+
+/** Clears per-character animation state (called before each full render). */
+export function resetMotionState() {
+  motionRegistry.clear();
+}
+
+interface CastTrack {
+  x: number;
+  speed: number;
+  /** 0..1 progress along the walk path */
+  move: number;
+}
+
+/**
+ * Position of a staged character at a given time.
+ *
+ * Walk/run travel uses a smoothstep ramp so the body accelerates and settles
+ * instead of teleporting between frames, and the reported speed is the exact
+ * derivative of that ramp so the gait cadence can lock onto it.
+ */
+function castTrack(st: StageCharacter, spec: SceneRenderSpec, tMs: number): CastTrack {
+  const start = st.enterDelayMs ?? 0;
+  const locomotion = st.action === "walk" || st.action === "run";
+  if (st.xTo === undefined || !locomotion) {
+    return { x: st.x, speed: 0, move: 0 };
+  }
+  const dist = st.xTo - st.x;
+  const nominal = (st.action === "run" ? 0.62 : 0.27) * (spec.height / 1280) * 560;
+  const durMs = clamp((Math.abs(dist) / Math.max(40, nominal)) * 1000, 550, Math.max(700, spec.durationMs * 0.82));
+  const p = clamp((tMs - start) / durMs, 0, 1);
+  const eased = smoothstep(p);
+  // |d/dt smoothstep(p)| = 6p(1-p) / dur
+  const speed = (Math.abs(dist) * 6 * p * (1 - p)) / (durMs / 1000);
+  return { x: st.x + dist * eased, speed, move: p };
+}
+
+/** True while the current scene's narration is actually being spoken. */
+function isSpeakingAt(spec: SceneRenderSpec, tMs: number): boolean {
+  if (!spec.words?.length) return false;
+  for (const w of spec.words) {
+    if (tMs >= w.startMs - 40 && tMs <= w.endMs + 60) return true;
+  }
+  return false;
+}
+
 function drawCast(ctx: Ctx, spec: SceneRenderSpec, tMs: number, groundY: number, seed: number): CharacterAnchors[] {
   const anchors: CharacterAnchors[] = [];
-  const p = clamp(tMs / Math.max(1, spec.durationMs), 0, 1);
   const baseHeight = 560 * (spec.height / 1280);
   const cast = spec.staging.length ? spec.staging : autoStage(spec);
-  const speaking = false;
+  const speaking = isSpeakingAt(spec, tMs);
+  const moodMouth = mouthForMood(spec.mood);
+  const frameMs = 1000 / 30;
 
   for (const st of cast) {
     const spec2 = spec.characters.find((c) => c.id === st.id) ?? spec.characters[0];
     if (!spec2) continue;
     const isChild = spec2.age === "anak" || spec2.gender === "anak";
     const h = baseHeight * (isChild ? 0.68 : 1) * (st.scale ?? 1) * (spec2.heightScale || 1);
-    let x = st.x;
-    if (st.xTo !== undefined) {
-      const moveStart = st.enterDelayMs ?? 0;
-      const moveP = clamp((tMs - moveStart) / Math.max(600, spec.durationMs - moveStart), 0, 1);
-      x = st.x + (st.xTo - st.x) * moveP;
-    } else if (st.action === "walk" || st.action === "run") {
-      const stride = st.action === "run" ? 220 : 90;
-      x = st.x + Math.sin(p * Math.PI * 1.2) * stride * 0.35;
+
+    // ---- entrance: a short rise + fade beats characters popping into frame
+    const enterStart = st.enterDelayMs ?? 0;
+    const enter = clamp((tMs - enterStart) / 260, 0, 1);
+    if (enter <= 0) continue;
+    const enterEase = easeOutCubic(enter);
+
+    const track = castTrack(st, spec, tMs);
+    const key = `${spec.seedKey}|${st.id}`;
+    let motion = motionRegistry.get(key);
+    if (!motion) {
+      motion = new CharacterMotion(hashString(st.id + spec.seedKey));
+      motionRegistry.set(key, motion);
     }
-    const local = Math.max(0, (tMs - (st.enterDelayMs ?? 0)) / 1000);
-    const pose = makePose(st.action, local, {
-      seed: hashString(st.id + spec.seedKey),
-      mouth: mouthForMood(spec.mood),
-      speaking,
-    });
-    anchors.push(
-      drawCharacter(
-        ctx,
-        spec2,
-        {
-          x,
-          groundY,
+
+    const at = Math.max(0, (tMs - enterStart) / 1000);
+    const dt = (tMs - Math.max(enterStart, motion.lastT)) / 1000;
+
+    // A preview can ask for an arbitrary timestamp. Fast-forward the springs
+    // from the scene start so a still matches the video frame exactly instead
+    // of snapping to a fresh rig.
+    if (motion.lastT < 0 || tMs < motion.lastT - 1 || tMs - motion.lastT > 400) {
+      motion.reset();
+      for (let wt = enterStart; wt < tMs; wt += frameMs) {
+        const tr = castTrack(st, spec, wt);
+        motion.update({
+          action: st.action,
+          t: Math.max(0, (wt - enterStart) / 1000),
+          dtMs: frameMs,
+          speedPx: tr.speed,
           heightPx: h,
-          facing: st.facing,
-          pose,
-          heldItem: st.heldItem ?? "none",
-          rimLight: { color: spec.palette.lampWarm, strength: spec.timeOfDay === "malam" ? 0.5 : 0.18 },
-          shadowAlpha: 0.34,
-          detail: 1,
-        }
-      )
+          speaking,
+          mouth: moodMouth,
+        });
+      }
+    }
+
+    const pose = motion.update({
+      action: st.action,
+      t: at,
+      dtMs: Math.min(frameMs * 2, Math.max(0, dt * 1000)),
+      speedPx: track.speed,
+      heightPx: h,
+      speaking,
+      mouth: moodMouth,
+    });
+
+    ctx.save();
+    ctx.globalAlpha = enterEase;
+    anchors.push(
+      drawCharacter(ctx, spec2, {
+        x: track.x,
+        groundY: groundY + (1 - enterEase) * h * 0.03,
+        heightPx: h,
+        facing: st.facing,
+        pose,
+        heldItem: st.heldItem ?? "none",
+        rimLight: { color: spec.palette.lampWarm, strength: spec.timeOfDay === "malam" ? 0.5 : 0.18 },
+        shadowAlpha: 0.34 * enterEase,
+        detail: 1,
+      })
     );
+    ctx.restore();
   }
   void seed;
   return anchors;
@@ -402,26 +488,42 @@ export function autoStage(spec: SceneRenderSpec): StageCharacter[] {
     return rnd() > 0.7 ? "walk" : "idle";
   };
 
+  const withWalkTarget = (entry: StageCharacter, dir: 1 | -1): StageCharacter => {
+    if (entry.action !== "walk" && entry.action !== "run") return entry;
+    const dist = entry.action === "run" ? 150 : 110;
+    return { ...entry, xTo: clamp(entry.x + dir * dist, 120, 600) };
+  };
+
   if (chars.length === 1) {
+    const facing: 1 | -1 = rnd() > 0.5 ? 1 : -1;
     return [
-      {
-        id: chars[0].id,
-        x: 360 + (rnd() - 0.5) * 80,
-        action: pick(),
-        facing: rnd() > 0.5 ? 1 : -1,
-        heldItem: "none",
-      },
+      withWalkTarget(
+        {
+          id: chars[0].id,
+          x: 360 + (rnd() - 0.5) * 80,
+          action: pick(),
+          facing,
+          heldItem: "none",
+        },
+        facing
+      ),
     ];
   }
   const n = Math.min(3, chars.length);
   const spread = n === 2 ? 190 : 150;
-  return chars.slice(0, n).map((c, i) => ({
-    id: c.id,
-    x: 360 + (i - (n - 1) / 2) * spread * 2 * 0.5 + (rnd() - 0.5) * 30,
-    action: pick(),
-    facing: (i < (n - 1) / 2 ? 1 : -1) as 1 | -1,
-    heldItem: "none",
-  }));
+  return chars.slice(0, n).map((c, i) => {
+    const facing: 1 | -1 = i < (n - 1) / 2 ? 1 : -1;
+    return withWalkTarget(
+      {
+        id: c.id,
+        x: 360 + (i - (n - 1) / 2) * spread * 2 * 0.5 + (rnd() - 0.5) * 30,
+        action: pick(),
+        facing,
+        heldItem: "none",
+      },
+      facing
+    );
+  });
 }
 
 export function stagingFromScene(params: {
