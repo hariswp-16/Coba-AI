@@ -394,6 +394,9 @@ function drawCast(ctx: Ctx, spec: SceneRenderSpec, tMs: number, groundY: number,
   const anchors: CharacterAnchors[] = [];
   const baseHeight = 560 * (spec.height / 1280);
   const cast = spec.staging.length ? spec.staging : autoStage(spec);
+  // Only the character carrying the line moves its mouth. Having the whole
+  // cast flap at once read as a glitch, not a conversation.
+  const speakerId = cast.length ? cast[0].id : "";
   const speaking = isSpeakingAt(spec, tMs);
   const moodMouth = mouthForMood(spec.mood);
   const frameMs = 1000 / 30;
@@ -434,7 +437,7 @@ function drawCast(ctx: Ctx, spec: SceneRenderSpec, tMs: number, groundY: number,
           dtMs: frameMs,
           speedPx: tr.speed,
           heightPx: h,
-          speaking,
+          speaking: speaking && st.id === speakerId,
           mouth: moodMouth,
         });
       }
@@ -446,7 +449,7 @@ function drawCast(ctx: Ctx, spec: SceneRenderSpec, tMs: number, groundY: number,
       dtMs: Math.min(frameMs * 2, Math.max(0, dt * 1000)),
       speedPx: track.speed,
       heightPx: h,
-      speaking,
+      speaking: speaking && st.id === speakerId,
       mouth: moodMouth,
     });
 

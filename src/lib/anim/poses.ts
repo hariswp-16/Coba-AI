@@ -269,8 +269,10 @@ export function makePose(action: Action, t: number, opts: PoseOptions = {}): Pos
       // hand rises to the eye: the elbow has to travel *above* the shoulder for
       // that reach, so this is the one pose that wants the forward solution
       handNear = { x: 0.17 + sob * 0.005, y: -0.46 };
-      handFar = polar(anchors(lean, headTilt), "far", 0.5, 0.2);
+      // the far hand comes up to the other cheek: both forearms shield the face
+      handFar = { x: 0.115 - sob * 0.004, y: -0.4 };
       bendNear = "forward";
+      bendFar = "forward";
       footNearX = 0.055;
       footFarX = -0.045;
       mouth = "sad";
@@ -286,7 +288,7 @@ export function makePose(action: Action, t: number, opts: PoseOptions = {}): Pos
       // forearms thrown up between the face and the threat: the classic
       // "recoil" read, and the only arm pose that clears the big head
       handNear = { x: 0.205 + Math.sin(t * 3) * 0.006, y: -0.44 };
-      handFar = { x: 0.155 + Math.cos(t * 3.4) * 0.006, y: -0.38 };
+      handFar = { x: 0.125 + Math.cos(t * 3.4) * 0.006, y: -0.29 };
       bendNear = "forward";
       bendFar = "forward";
       footNearX = 0.075;
