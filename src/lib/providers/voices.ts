@@ -1,16 +1,17 @@
 import type { VoicePreset } from "../types";
 
 /**
- * Voice presets. `local` presets are guaranteed to exist (bundled eSpeak-NG
- * Indonesian voice with different rate/pitch/persona settings). Remote presets
- * are only listed when the configured provider actually exposes them.
+ * Voice presets. `local` presets are guaranteed to exist: they run the bundled
+ * Paradee-8M neural Indonesian narrator (24 kHz, ONNX, offline) at different
+ * rates and personas. Remote presets are only listed when the configured
+ * provider actually exposes them.
  */
 export const LOCAL_VOICE_PRESETS: VoicePreset[] = [
   {
     id: "narrator-dramatic",
     name: "Narator Dramatis",
     persona: "dramatis",
-    description: "Tempo sedang, jeda tegang, cocok untuk cerita misteri dan konflik.",
+    description: "Narator pria neural, tempo sedang dengan jeda tegang untuk cerita misteri dan konflik.",
     provider: "local",
     providerVoiceId: "id",
     rate: 0.92,
@@ -30,7 +31,7 @@ export const LOCAL_VOICE_PRESETS: VoicePreset[] = [
     id: "narrator-documentary",
     name: "Narator Dokumenter",
     persona: "dokumenter",
-    description: "Netral, jelas, dan stabil untuk cerita informatif.",
+    description: "Netral, jelas, dan stabil — pilihan terbaik untuk dokumenter dan video edukasi.",
     provider: "local",
     providerVoiceId: "id",
     rate: 1.0,

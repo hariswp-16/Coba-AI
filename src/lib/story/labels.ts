@@ -14,6 +14,7 @@ export function buildShortLabel(story: StoryDoc, style: StyleProfileSpec): strin
   if (/khidmat/.test(mood)) return "MALAM PENUH DOA";
   if (/semangat/.test(mood)) return "TITIK TERENDAH";
   if (/hangat/.test(mood)) return "RUMAH";
+  if (/informatif|edukatif|sains|penjelasan/.test(mood)) return "SAINS HARIAN";
   if (style.hud.labelText) return style.hud.labelText.toUpperCase();
   return tod === "malam" ? "MALAM INI" : "HARI INI";
 }

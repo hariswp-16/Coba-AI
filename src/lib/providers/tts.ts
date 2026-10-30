@@ -80,9 +80,43 @@ export function tokenizeForTiming(text: string): string[] {
   return text.match(/[\p{L}\p{N}][\p{L}\p{N}.,!?%:'’-]*/gu) ?? [];
 }
 
-export const espeakTts: TtsAdapter = {
+/* ------------------------------------------------------------------ */
+/* Paradee-8M (bundled neural Indonesian voice) — the default `local`  */
+/* ------------------------------------------------------------------ */
+
+export const paradeeTts: TtsAdapter = {
   id: "local",
-  label: "eSpeak-NG Indonesia (lokal, tanpa API key)",
+  label: "Narator Neural Paradee-8M (lokal, tanpa API key)",
+  available: () => true,
+  async synthesize(req) {
+    const { synthesizeNarration, toWav, warmParadee } = await import("../tts/paradee");
+    warmParadee();
+    const text = normalizeForSpeech(req.text);
+    // `speed` in the model is a rate multiplier: >1 is faster, <1 calmer.
+    const speed = Math.max(0.6, Math.min(1.5, req.rate ?? 1));
+    const speech = await synthesizeNarration(text, { speed, pauseMs: speed < 0.95 ? 230 : 180 });
+    const wav = toWav(speech.audio, speech.sampleRate);
+    return {
+      audio: wav,
+      mime: "audio/wav",
+      sampleRate: speech.sampleRate,
+      durationMs: speech.durationMs,
+      words: speech.words,
+      provider: "local",
+      voiceId: req.voiceId,
+      costUsd: 0,
+      notes: "Narator neural Paradee-8M (ONNX, 24 kHz) berjalan sepenuhnya offline.",
+    };
+  },
+};
+
+/* ------------------------------------------------------------------ */
+/* eSpeak-NG (kept as an explicit fallback provider)                   */
+/* ------------------------------------------------------------------ */
+
+export const espeakTts: TtsAdapter = {
+  id: "espeak",
+  label: "eSpeak-NG Indonesia (cadangan robotik, tanpa API key)",
   available: () => true,
   async synthesize(req) {
     const worker = await getEspeakWorker();
@@ -290,8 +324,8 @@ export const googleTts: TtsAdapter = {
 
 export function getTtsAdapter(provider?: string): TtsAdapter {
   const id = provider || env.tts.provider;
-  const adapter = [espeakTts, elevenLabsTts, openAiTts, googleTts].find((a) => a.id === id);
-  if (!adapter) return espeakTts;
+  const adapter = [paradeeTts, espeakTts, elevenLabsTts, openAiTts, googleTts].find((a) => a.id === id);
+  if (!adapter) return paradeeTts;
   if (!adapter.available()) {
     throw new Error(
       `Provider TTS "${id}" dipilih tetapi API key belum diatur. Tambahkan TTS_API_KEY di environment, atau gunakan provider "local".`

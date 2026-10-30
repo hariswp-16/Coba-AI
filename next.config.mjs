@@ -6,6 +6,7 @@ const nextConfig = {
     "@echogarden/espeak-ng-emscripten",
     "@ffmpeg-installer/ffmpeg",
     "ffprobe-static",
+    "onnxruntime-web",
   ],
   experimental: {
     serverActions: { bodySizeLimit: "512mb" },

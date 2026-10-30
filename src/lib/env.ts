@@ -102,7 +102,7 @@ export function integrationStatus() {
     tts: {
       provider: env.tts.provider,
       configured: env.tts.provider === "local" ? true : Boolean(env.tts.apiKey),
-      model: env.tts.provider === "local" ? "espeak-ng (id)" : env.tts.provider,
+      model: env.tts.provider === "local" ? "paradee-8m (id, onnx)" : env.tts.provider,
       requiresKey: env.tts.provider !== "local",
     },
     voiceClone: {

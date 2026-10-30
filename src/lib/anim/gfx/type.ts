@@ -75,9 +75,13 @@ export function drawCaption(ctx: Ctx, o: CaptionOpts) {
   for (let ci = 0; ci < chunks.length; ci++) {
     const chunk = chunks[ci];
     const next = chunks[ci + 1];
-    const fadeStart = next ? Math.max(chunk.endMs - 40, next.startMs - 120) : chunk.endMs;
+    // Hand the caption over cleanly: the outgoing chunk is gone before the
+    // first word of the next one rises in, so two lines never overlap.
+    const handoff = next ? next.startMs - LEAD_MS : Number.POSITIVE_INFINITY;
     if (o.tMs < chunk.startMs - LEAD_MS) continue;
     if (o.tMs > chunk.endMs + 260) continue;
+    if (next && o.tMs >= handoff) continue;
+    const fadeStart = next ? Math.min(chunk.endMs - 40, handoff - 240) : chunk.endMs;
     const outro = o.noFade ? 0 : clamp((o.tMs - fadeStart) / 200, 0, 1);
     const chunkAlpha = 1 - outro;
     if (chunkAlpha <= 0.01) continue;

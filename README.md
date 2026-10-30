@@ -76,7 +76,7 @@ Tanpa worker, job akan tetap berstatus **antre** dan video tidak diproduksi.
 | `STORAGE_DRIVER` | `local` (folder `storage/`) atau `s3` (+ `S3_*`). |
 | `LLM_PROVIDER` | `local` (story engine deterministik) / `openai` / `anthropic` / `gemini` / `openai-compatible`. |
 | `IMAGE_PROVIDER` | `local` (renderer prosedural 2D) / `openai` / `stability` / `replicate` / `fal`. |
-| `TTS_PROVIDER` | `local` (espeak-ng Bahasa Indonesia, biaya 0) / `elevenlabs` / `openai` / `google` / `azure`. |
+| `TTS_PROVIDER` | `local` (narator neural Paradee-8M Bahasa Indonesia, ONNX 24 kHz, biaya 0) / `espeak` (cadangan) / `elevenlabs` / `openai` / `google` / `azure`. |
 | `VOICE_CLONE_PROVIDER` | `none` / `elevenlabs` / `fishaudio` — mengaktifkan halaman **Suara Saya**. |
 | `VIDEO_PROVIDER` | `none` / `replicate` / `fal` — klip AI opsional per scene. |
 | `COST_*` | Estimasi biaya per operasi untuk ringkasan biaya di Pengaturan. |
@@ -157,8 +157,11 @@ npx tsx scripts/preview-scene.ts             # 6 variasi gaya → public/preview
 
 ## Batasan yang diketahui
 
-- Voice-over memakai eSpeak-NG lokal: jelas dan gratis, tetapi terdengar sintetis. Untuk kualitas
-  narator natural, set `TTS_PROVIDER=elevenlabs` (atau `openai`).
+- Voice-over default memakai **Paradee-8M**, model TTS neural Bahasa Indonesia 9 MB yang berjalan
+  offline lewat ONNX Runtime (WASM). Model + kosakata ada di `models/tts/` (lisensi MIT, dari
+  [ARBO-TEAM/arboTTS](https://github.com/ARBO-TEAM/arboTTS)); `TTS_MODEL_DIR` bisa menunjuk folder lain.
+  `TTS_PROVIDER=espeak` masih tersedia sebagai cadangan robotik, dan provider berbayar
+  (`elevenlabs`/`openai`/`google`) tetap bisa dipakai untuk kualitas studio.
 - Karakter adalah stickman/vektor prosedural, bukan model 3D. Gaya mengikuti referensi (palet,
   tipografi, tempo), bukan gerakan persis dari video referensi.
 - SQLite single-writer: satu worker per database. Untuk multi-worker gunakan Postgres.

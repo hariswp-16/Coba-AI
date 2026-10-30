@@ -90,8 +90,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     showHud: (project.subtitleSettings.showHud ?? true) && style.hud.enabled,
     subtitleNoFade: true,
     purpose: scene.purpose,
-    ctaPills: scene.purpose === "cta" ? ["MENYUSUL TEMANMU", "BAWA ADIK PULANG"] : undefined,
-    ctaQuestion: scene.purpose === "cta" ? "APA PILIHANMU?" : undefined,
+    ctaPills: scene.purpose === "cta" ? scene.ctaPills ?? ["MENYUSUL TEMANMU", "BAWA ADIK PULANG"] : undefined,
+    ctaQuestion: scene.purpose === "cta" ? scene.ctaQuestion ?? "APA PILIHANMU?" : undefined,
     sceneCount: project.story.scenes.length,
     gfxMotif: motifForPreview,
   };

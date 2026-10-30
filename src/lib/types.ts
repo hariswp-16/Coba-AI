@@ -253,6 +253,9 @@ export interface Scene {
   transition: "cut" | "fade" | "whip" | "zoom" | "dissolve";
   emphasisWords: string[];
   sfx: string[];
+  /** optional call-to-action card copy (used by the motion-graphics renderer) */
+  ctaPills?: string[];
+  ctaQuestion?: string;
   words: SceneWord[];
   audioAssetId?: string | null;
   imageAssetId?: string | null;
