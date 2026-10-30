@@ -37,6 +37,8 @@ export interface SubtitleStyle {
   background: boolean;
   backgroundColor: string;
   marginX: number;
+  /** "block" = accent pill behind the word, "color" = the word itself is accented */
+  emphasisStyle?: "block" | "color";
   mode: "word" | "phrase";
 }
 
@@ -159,6 +161,8 @@ export interface StyleProfileSpec {
     clock: boolean;
     choicePills: boolean;
     notes: string;
+    /** "card" = art sits in a rounded card, "full" = full-bleed illustration */
+    layout?: "card" | "full";
   };
 }
 
@@ -256,6 +260,8 @@ export interface Scene {
   /** optional call-to-action card copy (used by the motion-graphics renderer) */
   ctaPills?: string[];
   ctaQuestion?: string;
+  /** big number callout, e.g. { value: "100 KM", label: "TEBAL ATMOSFER" } */
+  stat?: { value: string; label: string };
   words: SceneWord[];
   audioAssetId?: string | null;
   imageAssetId?: string | null;

@@ -60,6 +60,8 @@ export interface SceneRenderSpec {
   sceneCount?: number;
   /** motion-graphics illustration chosen for this scene by the story plan */
   gfxMotif?: string;
+  /** big number callout drawn by the full-bleed motion-graphics layout */
+  stat?: { value: string; label: string };
 }
 
 interface Prepared {

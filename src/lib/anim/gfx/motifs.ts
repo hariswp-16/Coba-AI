@@ -1072,9 +1072,10 @@ function drawSky(ctx: Ctx, o: MotifOpts) {
 }
 
 function drawPrism(ctx: Ctx, o: MotifOpts) {
-  const night = o.timeOfDay === "malam";
-  sky(ctx, o, night ? mix(o.theme.plate, "#0B1018", 0.5) : mix("#F4EEE0", o.theme.plate, 0.3), night ? mix(o.theme.plate, "#060A0F", 0.55) : "#E3DACA");
-  const ink = night ? "#F5F7FA" : o.theme.ink;
+  // deep optics stage: the rainbow needs a dark plate to glow against, and the
+  // white caption on top stays legible
+  sky(ctx, o, "#0B3350", "#1C6C90");
+  const ink = "#F2F8FC";
 
   const px = o.x + o.w * 0.5;
   const py = o.y + o.h * 0.56;
@@ -1099,15 +1100,24 @@ function drawPrism(ctx: Ctx, o: MotifOpts) {
   ctx.lineTo(inEnd[0], inEnd[1]);
   ctx.stroke();
 
+  // glow behind the glass
+  const glow = ctx.createRadialGradient(px, py, 0, px, py, size * 1.5);
+  glow.addColorStop(0, alpha("#BFE3FF", 0.26));
+  glow.addColorStop(1, alpha("#BFE3FF", 0));
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(px, py, size * 1.5, 0, Math.PI * 2);
+  ctx.fill();
+
   // prism body
   ctx.save();
   ctx.beginPath();
   tri.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
   ctx.closePath();
-  ctx.fillStyle = night ? alpha("#BFE3FF", 0.14) : alpha("#FFFFFF", 0.5);
+  ctx.fillStyle = alpha("#DCEFFF", 0.16);
   ctx.fill();
-  ctx.strokeStyle = alpha(ink, 0.5);
-  ctx.lineWidth = Math.max(1.4, o.w * 0.004);
+  ctx.strokeStyle = alpha(ink, 0.8);
+  ctx.lineWidth = Math.max(2, o.w * 0.005);
   ctx.stroke();
   ctx.restore();
 

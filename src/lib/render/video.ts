@@ -69,6 +69,7 @@ function sceneSpec(
     showSubtitles: true,
     sceneCount: o.story.scenes.length,
     gfxMotif: motif,
+    stat: scene.stat,
   };
 }
 

@@ -79,10 +79,11 @@ export function drawCaption(ctx: Ctx, o: CaptionOpts) {
     // first word of the next one rises in, so two lines never overlap.
     const handoff = next ? next.startMs - LEAD_MS : Number.POSITIVE_INFINITY;
     if (o.tMs < chunk.startMs - LEAD_MS) continue;
-    if (o.tMs > chunk.endMs + 260) continue;
+    if (o.tMs > (next ? chunk.endMs + 260 : chunk.endMs + 1400)) continue;
     if (next && o.tMs >= handoff) continue;
-    const fadeStart = next ? Math.min(chunk.endMs - 40, handoff - 240) : chunk.endMs;
-    const outro = o.noFade ? 0 : clamp((o.tMs - fadeStart) / 200, 0, 1);
+    // the closing line holds rather than blinking out while the scene runs on
+    const fadeStart = next ? Math.min(chunk.endMs - 40, handoff - 240) : chunk.endMs + 1000;
+    const outro = o.noFade ? 0 : clamp((o.tMs - fadeStart) / 300, 0, 1);
     const chunkAlpha = 1 - outro;
     if (chunkAlpha <= 0.01) continue;
 
@@ -111,7 +112,8 @@ export function drawCaption(ctx: Ctx, o: CaptionOpts) {
         ctx.save();
         ctx.globalAlpha = chunkAlpha * appear;
 
-        if (emphasis) {
+        const colourMode = style.emphasisStyle === "color";
+        if (emphasis && !colourMode) {
           const grow = easeOutCubic(clamp((o.tMs - (word.startMs - LEAD_MS - 40)) / 320, 0, 1));
           const padX = fontSize * 0.14;
           const barH = fontSize * 0.92;
@@ -124,7 +126,9 @@ export function drawCaption(ctx: Ctx, o: CaptionOpts) {
         ctx.font = `${style.fontWeight} ${fontSize}px ${style.fontFamily}`;
         ctx.letterSpacing = `${letterSpacing}px`;
         const ink = emphasis
-          ? theme.onAccent
+          ? colourMode
+            ? theme.accent
+            : theme.onAccent
           : active
             ? theme.ink
             : mix(theme.ink, theme.mute, spoken ? 0.45 : 0.18);
@@ -133,8 +137,14 @@ export function drawCaption(ctx: Ctx, o: CaptionOpts) {
           ctx.shadowColor = alpha(theme.accent, 0.45);
           ctx.shadowBlur = fontSize * 0.35;
         }
+        if (style.emphasisStyle === "color" && style.shadow > 0) {
+          ctx.shadowColor = alpha("#000000", 0.55);
+          ctx.shadowBlur = fontSize * style.shadow;
+          ctx.shadowOffsetY = fontSize * 0.05;
+        }
         ctx.fillText(text, x, y);
         ctx.shadowBlur = 0;
+        ctx.shadowOffsetY = 0;
         ctx.restore();
 
         x += line.widths[wi] + space;

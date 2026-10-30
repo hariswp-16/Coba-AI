@@ -216,6 +216,36 @@ export const MOTION_GRAPHICS: StyleProfileSpec = {
   },
 };
 
+const MOTION_PALETTE_FULL = { ...MOTION_PALETTE_DARK, highlight: "#FF6B3D" };
+
+/**
+ * Reference-style explainer: the illustration bleeds to the edges of the
+ * frame, a big number carries the beat, and the caption is white with the
+ * keyword picked out in the accent colour.
+ */
+export const MOTION_GRAPHICS_FULL: StyleProfileSpec = {
+  ...MOTION_GRAPHICS,
+  palette: MOTION_PALETTE_FULL,
+  lighting: { ...MOTION_GRAPHICS.lighting, vignette: 0.12, grain: 0.22 },
+  subtitle: {
+    ...MOTION_GRAPHICS.subtitle,
+    fontSize: 56,
+    wordsPerChunk: 3,
+    positionY: 0.74,
+    uppercase: false,
+    fill: "#FFFFFF",
+    emphasisColor: "#FF6B3D",
+    emphasisStyle: "color",
+    shadow: 0.24,
+    letterSpacing: 0.2,
+  },
+  graphics: {
+    ...MOTION_GRAPHICS.graphics,
+    layout: "full",
+    notes: "Ilustrasi penuh layar tanpa kartu, angka besar sebagai penanda data, caption putih dengan kata kunci berwarna aksen.",
+  },
+};
+
 export const PRESETS: { id: string; name: string; description: string; spec: StyleProfileSpec }[] = [
   {
     id: "motion-graphics",
@@ -236,6 +266,13 @@ export const PRESETS: { id: string; name: string; description: string; spec: Sty
       hud: { ...MOTION_GRAPHICS.hud, labelColor: "#1F8A7A", clockColor: "#12171D", episodeColor: "#12171D" },
       subtitle: { ...MOTION_GRAPHICS.subtitle, fill: "#12171D", emphasisColor: "#1F8A7A" },
     },
+  },
+  {
+    id: "motion-graphics-penuh",
+    name: "Motion Graphics — Infografis Penuh",
+    description:
+      "Gaya explainer referensi: ilustrasi vektor memenuhi seluruh layar, angka besar sebagai penanda data (mis. 100 KM, 10x), caption putih dengan kata kunci berwarna aksen.",
+    spec: MOTION_GRAPHICS_FULL,
   },
   {
     id: "stickman-dramatis",

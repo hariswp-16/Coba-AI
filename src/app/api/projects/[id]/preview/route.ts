@@ -94,6 +94,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     ctaQuestion: scene.purpose === "cta" ? scene.ctaQuestion ?? "APA PILIHANMU?" : undefined,
     sceneCount: project.story.scenes.length,
     gfxMotif: motifForPreview,
+    stat: scene.stat,
   };
   renderSceneFrame(cctx, spec, tMs);
 
