@@ -1,7 +1,7 @@
 import { Ctx, clamp, mulberry32, roundRect } from "../geometry";
 import { GfxTheme, alpha, mix } from "./theme";
 
-export type MotifId = "city" | "window" | "well" | "door" | "mosque" | "hills" | "lamp" | "sky" | "prism" | "sunset" | "molecules";
+export type MotifId = "city" | "window" | "well" | "door" | "mosque" | "hills" | "lamp" | "sky" | "prism" | "sunset" | "molecules" | "rain" | "cloud" | "evaporation";
 
 export interface MotifQuery {
   location: string;
@@ -15,6 +15,9 @@ const RULES: [RegExp, MotifId][] = [
   // science-explainer beats come first: "langit" must not be swallowed by "rumah"
   [/prisma|spektrum|pelangi|warna cahaya|warna-warna|gelombang|panjang/, "prism"],
   [/senja|terbenam|terbit|ufuk|horison|cakrawala/, "sunset"],
+  [/hujan|gerimis|badai|deras|turun/, "rain"],
+  [/awan|mengembun|embun|titik air|kabut/, "cloud"],
+  [/menguap|uap|laut|samudra|danau|permukaan air/, "evaporation"],
   [/molekul|nitrogen|oksigen|partikel|debu|udara/, "molecules"],
   [/langit|atmosfer|atmosfir|matahari|sinar|hambur|foton|angkasa|cahaya/, "sky"],
   [/sumur|timba|perigi|ember/, "well"],
@@ -39,9 +42,12 @@ const RULES: [RegExp, MotifId][] = [
  * of a room, the next beat can be the doorway or the street; it should not
  * suddenly be a hillside three villages away.
  */
-const SCIENCE: MotifId[] = ["sky", "molecules", "prism", "sunset"];
+const SCIENCE: MotifId[] = ["sky", "molecules", "prism", "sunset", "rain", "cloud", "evaporation"];
 
 const VARIETY: Record<MotifId, MotifId[]> = {
+  rain: ["cloud", "evaporation", "sky"],
+  cloud: ["rain", "evaporation", "sky"],
+  evaporation: ["cloud", "rain", "sky"],
   sky: ["molecules", "prism", "sunset"],
   molecules: ["sky", "prism", "sunset"],
   prism: ["sky", "molecules", "sunset"],
@@ -1336,6 +1342,286 @@ function drawMolecules(ctx: Ctx, o: MotifOpts) {
   ctx.setLineDash([]);
 }
 
+
+/** Soft cumulus built from overlapping circles; returns the base line. */
+function cumulus(ctx: Ctx, o: MotifOpts, cx: number, baseY: number, size: number, top: string, bottom: string, seed: number) {
+  const rnd = mulberry32(seed);
+  const lobes = 11;
+  const pts: [number, number, number][] = [];
+  for (let i = 0; i < lobes; i++) {
+    const f = i / (lobes - 1);
+    const x = cx + (f - 0.5) * size * 1.9 + (rnd() - 0.5) * size * 0.2;
+    const hump = Math.sin(Math.PI * f);
+    const y = baseY - size * (0.32 + hump * 0.72) - rnd() * size * 0.1;
+    pts.push([x, y, size * (0.28 + hump * 0.4 + rnd() * 0.12)]);
+  }
+  const g = ctx.createLinearGradient(0, baseY - size * 1.2, 0, baseY);
+  g.addColorStop(0, top);
+  g.addColorStop(1, bottom);
+  ctx.fillStyle = g;
+  pts.forEach(([x, y, r]) => {
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  // a lens-shaped base: a flat rectangle reads as a table under the cloud
+  ctx.beginPath();
+  ctx.ellipse(cx, baseY - size * 0.14, size * 0.95, size * 0.19, 0, 0, Math.PI * 2);
+  ctx.fill();
+  return baseY;
+}
+
+/**
+ * The water cycle's first step: sun on the sea, vapour rising off the surface.
+ */
+function drawEvaporation(ctx: Ctx, o: MotifOpts) {
+  sky(ctx, o, "#5FAFD8", "#D3EDF9");
+  const seaY = o.y + o.h * 0.63;
+
+  // sun
+  const sx = o.x + o.w * 0.72;
+  const sy = o.y + o.h * 0.2;
+  const sr = o.w * 0.085;
+  const g = ctx.createRadialGradient(sx, sy, sr * 0.4, sx, sy, sr * 5.5);
+  g.addColorStop(0, alpha("#FFF6CE", 0.9));
+  g.addColorStop(0.35, alpha("#FFE9A0", 0.28));
+  g.addColorStop(1, alpha("#FFE9A0", 0));
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(sx, sy, sr * 5.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#FFF4CF";
+  ctx.beginPath();
+  ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+  ctx.fill();
+
+  // sea
+  const sea = ctx.createLinearGradient(0, seaY, 0, o.y + o.h);
+  sea.addColorStop(0, "#2E86A8");
+  sea.addColorStop(1, "#0C3A52");
+  ctx.fillStyle = sea;
+  ctx.fillRect(o.x, seaY, o.w, o.y + o.h - seaY);
+
+  // horizon glow
+  const hz = ctx.createLinearGradient(0, seaY - o.h * 0.05, 0, seaY + o.h * 0.04);
+  hz.addColorStop(0, alpha("#D8F1FF", 0));
+  hz.addColorStop(0.5, alpha("#D8F1FF", 0.5));
+  hz.addColorStop(1, alpha("#D8F1FF", 0));
+  ctx.fillStyle = hz;
+  ctx.fillRect(o.x, seaY - o.h * 0.05, o.w, o.h * 0.09);
+
+  // sun glitter + waves
+  ctx.save();
+  for (let i = 0; i < 7; i++) {
+    const y = seaY + o.h * (0.03 + i * 0.05);
+    ctx.strokeStyle = alpha("#BFE9FF", 0.3 + i * 0.03);
+    ctx.lineWidth = Math.max(1, o.w * 0.0025);
+    ctx.beginPath();
+    for (let x = o.x; x <= o.x + o.w; x += o.w * 0.05) {
+      const wy = y + Math.sin((x / o.w) * 9 + o.t * 1.1 + i) * o.h * 0.006;
+      if (x === o.x) ctx.moveTo(x, wy);
+      else ctx.lineTo(x, wy);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // vapour rising off the water
+  const rnd = mulberry32(o.seed + 29);
+  for (let i = 0; i < 26; i++) {
+    const phase = ((o.t * (0.16 + rnd() * 0.12) + rnd()) % 1);
+    const x0 = o.x + o.w * (0.06 + rnd() * 0.88);
+    const rise = (seaY - o.y) * 0.92;
+    const y = seaY - phase * rise;
+    const x = x0 + Math.sin(phase * 5 + i) * o.w * 0.03;
+    const fade = Math.sin(Math.PI * Math.min(1, phase * 1.1));
+    const r = o.w * (0.006 + phase * 0.016);
+    ctx.fillStyle = alpha("#FFFFFF", 0.5 * fade);
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // heat shimmer just above the water
+  ctx.strokeStyle = alpha("#FFFFFF", 0.22);
+  ctx.lineWidth = Math.max(1, o.w * 0.0022);
+  for (let i = 0; i < 3; i++) {
+    ctx.beginPath();
+    for (let x = o.x + o.w * 0.1; x <= o.x + o.w * 0.9; x += o.w * 0.02) {
+      const y = seaY - o.h * (0.02 + i * 0.03) + Math.sin(x * 0.05 + o.t * 3 + i) * o.h * 0.005;
+      if (x === o.x + o.w * 0.1) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+}
+
+/**
+ * Condensation: vapour gathering into a cloud, droplets coalescing inside it
+ * until they get heavy enough to fall out of the base.
+ */
+function drawCloud(ctx: Ctx, o: MotifOpts) {
+  const storm = o.timeOfDay === "malam" || isWet(o.weather);
+  sky(ctx, o, storm ? "#39485A" : "#6FB6DA", storm ? "#5A6B7C" : "#D7EDFA");
+  const cx = o.x + o.w * 0.5;
+  const baseY = o.y + o.h * 0.74;
+  const size = Math.min(o.w, o.h) * 0.21;
+  const drift = Math.sin(o.t * 0.25) * o.w * 0.012;
+  cumulus(
+    ctx,
+    o,
+    cx + drift,
+    baseY,
+    size,
+    storm ? "#E8EEF4" : "#FFFFFF",
+    storm ? "#6C7A89" : "#A9C3D6",
+    o.seed + 5
+  );
+  // shade pooled under the base so the cloud sits in the sky (a vertical
+  // gradient, so the rectangle never shows its own edge)
+  const under = ctx.createLinearGradient(0, baseY - size * 0.2, 0, baseY + size * 0.9);
+  under.addColorStop(0, alpha("#2B4256", 0));
+  under.addColorStop(0.28, alpha("#2B4256", 0.2));
+  under.addColorStop(1, alpha("#2B4256", 0));
+  ctx.fillStyle = under;
+  ctx.fillRect(o.x, baseY - size * 0.2, o.w, size * 1.1);
+
+  // droplets forming inside the cloud
+  const rnd = mulberry32(o.seed + 71);
+  for (let i = 0; i < 22; i++) {
+    const fx = (rnd() - 0.5) * 1.5;
+    const fy = 0.35 + rnd() * 0.85;
+    const pulse = 0.45 + 0.55 * Math.sin(o.t * 1.6 + rnd() * 6.28);
+    const x = cx + drift + size * fx;
+    const y = baseY - size * fy;
+    ctx.fillStyle = alpha(storm ? "#7FD3FF" : "#3FA9E0", 0.5 * pulse);
+    ctx.beginPath();
+    ctx.arc(x, y, o.w * 0.007, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // a shower leaking out of the base once the cloud is heavy
+  if (o.p > 0.35) {
+    const rnd2 = mulberry32(o.seed + 97);
+    const n = 26;
+    ctx.strokeStyle = alpha("#BFE3FF", 0.5);
+    ctx.lineWidth = Math.max(1.2, o.w * 0.003);
+    ctx.lineCap = "round";
+    for (let i = 0; i < n; i++) {
+      const x = cx + drift + (rnd2() - 0.5) * size * 1.7;
+      const phase = (o.t * (1.1 + rnd2() * 0.6) + rnd2()) % 1;
+      const y0 = baseY + o.h * 0.02 + phase * o.h * 0.3;
+      ctx.globalAlpha = Math.min(1, (o.p - 0.35) * 2) * (1 - phase);
+      ctx.beginPath();
+      ctx.moveTo(x, y0);
+      ctx.lineTo(x - o.w * 0.006, y0 + o.h * 0.05);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ground far below, tiny, for scale
+  ground(ctx, o, o.y + o.h * 0.93, storm ? "#2C3B45" : "#79B08A", storm ? "#1B262D" : "#3E7C5C");
+}
+
+/**
+ * Rain falling on a wet landscape: heavy cloud deck, streaks, puddles.
+ */
+function drawRain(ctx: Ctx, o: MotifOpts) {
+  // A slate-blue sky, not a black one: the shot still has to read at 360 px
+  // inside a feed, and the caption sits on the ground band below.
+  sky(ctx, o, "#5B7488", "#A8C1CE");
+  const horizon = o.y + o.h * (0.66 + mulberry32(o.seed + 9)() * 0.06);
+
+  // cloud deck
+  const rnd = mulberry32(o.seed + 3);
+  ctx.fillStyle = "#54687B";
+  for (let i = 0; i < 9; i++) {
+    const x = o.x + o.w * (0.02 + i * 0.12) + Math.sin(o.t * 0.2 + i) * o.w * 0.01;
+    const y = o.y + o.h * (0.06 + (i % 3) * 0.045);
+    ctx.beginPath();
+    ctx.ellipse(x, y, o.w * (0.14 + rnd() * 0.1), o.h * (0.075 + rnd() * 0.045), 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // lit underside: the deck would otherwise read as one flat silhouette
+  const rim = ctx.createLinearGradient(0, o.y + o.h * 0.1, 0, o.y + o.h * 0.22);
+  rim.addColorStop(0, alpha("#DCEBF5", 0.34));
+  rim.addColorStop(1, alpha("#DCEBF5", 0));
+  ctx.fillStyle = rim;
+  ctx.fillRect(o.x, o.y + o.h * 0.1, o.w, o.h * 0.12);
+  ctx.fillStyle = alpha("#2C3A46", 0.4);
+  ctx.fillRect(o.x, o.y, o.w, o.h * 0.08);
+
+  // distant hills
+  ctx.fillStyle = "#4E6B63";
+  ctx.beginPath();
+  ctx.moveTo(o.x, horizon);
+  for (let i = 0; i <= 6; i++) {
+    const x = o.x + (o.w * i) / 6;
+    const y = horizon - o.h * (0.05 + ((i * 7 + o.seed) % 5) * 0.02);
+    ctx.quadraticCurveTo(x - o.w / 12, y - o.h * 0.03, x, y);
+  }
+  ctx.lineTo(o.x + o.w, horizon + o.h * 0.02);
+  ctx.lineTo(o.x, horizon + o.h * 0.02);
+  ctx.closePath();
+  ctx.fill();
+
+  // wet ground with puddles
+  ground(ctx, o, horizon + o.h * 0.02, "#3D5854", "#22343A");
+  const prnd = mulberry32(o.seed + 17);
+  for (let i = 0; i < 4; i++) {
+    const px = o.x + o.w * (0.12 + i * 0.24 + prnd() * 0.05);
+    const py = o.y + o.h * (0.8 + prnd() * 0.12);
+    const pw = o.w * (0.14 + prnd() * 0.08);
+    const ph = pw * 0.24;
+    ctx.fillStyle = alpha("#B7DBEC", 0.34);
+    ctx.beginPath();
+    ctx.ellipse(px, py, pw, ph, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // ripple rings
+    for (let k = 0; k < 2; k++) {
+      const rp = ((o.t * 0.8 + k * 0.5 + i * 0.3) % 1);
+      ctx.strokeStyle = alpha("#DDF1FF", 0.35 * (1 - rp));
+      ctx.lineWidth = Math.max(1, o.w * 0.0025);
+      ctx.beginPath();
+      ctx.ellipse(px, py, pw * (0.3 + rp * 0.7), ph * (0.3 + rp * 0.7), 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
+  // rain
+  const rrnd = mulberry32(o.seed + 41);
+  ctx.strokeStyle = alpha("#D9ECFF", 0.55);
+  ctx.lineWidth = Math.max(1.2, o.w * 0.0028);
+  ctx.lineCap = "round";
+  for (let i = 0; i < 140; i++) {
+    const speed = 0.75 + rrnd() * 0.6;
+    const x0 = o.x + rrnd() * o.w * 1.1 - o.w * 0.05;
+    const len = o.h * (0.05 + rrnd() * 0.05);
+    const y = o.y + ((rrnd() * (o.h + len) + o.t * o.h * speed) % (o.h + len)) - len;
+    const lean = o.w * 0.012;
+    ctx.strokeStyle = alpha("#D9ECFF", 0.2 + rrnd() * 0.35);
+    ctx.beginPath();
+    ctx.moveTo(x0, y);
+    ctx.lineTo(x0 - lean, y + len);
+    ctx.stroke();
+  }
+  // splash flecks on the ground
+  for (let i = 0; i < 18; i++) {
+    const phase = (o.t * 1.6 + i * 0.37) % 1;
+    const x = o.x + o.w * (0.05 + ((i * 53) % 90) / 100);
+    const y = horizon + o.h * (0.03 + ((i * 17) % 12) / 100);
+    ctx.strokeStyle = alpha("#E8F6FF", 0.35 * (1 - phase));
+    ctx.lineWidth = Math.max(1, o.w * 0.002);
+    ctx.beginPath();
+    ctx.moveTo(x, y - o.h * 0.02 * (1 - phase));
+    ctx.lineTo(x + o.w * 0.012, y - o.h * 0.045 * (1 - phase));
+    ctx.moveTo(x, y - o.h * 0.02 * (1 - phase));
+    ctx.lineTo(x - o.w * 0.012, y - o.h * 0.045 * (1 - phase));
+    ctx.stroke();
+  }
+}
+
 const DRAWERS: Record<MotifId, (ctx: Ctx, o: MotifOpts) => void> = {
   lamp: drawLamp,
   city: drawCity,
@@ -1348,6 +1634,9 @@ const DRAWERS: Record<MotifId, (ctx: Ctx, o: MotifOpts) => void> = {
   prism: drawPrism,
   sunset: drawSunset,
   molecules: drawMolecules,
+  rain: drawRain,
+  cloud: drawCloud,
+  evaporation: drawEvaporation,
 };
 
 /** Draws one illustration clipped to the given rect. */

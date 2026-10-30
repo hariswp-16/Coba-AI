@@ -246,7 +246,21 @@ export const MOTION_GRAPHICS_FULL: StyleProfileSpec = {
   },
 };
 
+/**
+ * The house look: every new project starts from the reference reel's language
+ * (full-bleed illustration, one big number per beat, white caption with a
+ * coloured keyword) unless the user picks another style on purpose.
+ */
+export const DEFAULT_STYLE_PRESET = "motion-graphics-penuh";
+
 export const PRESETS: { id: string; name: string; description: string; spec: StyleProfileSpec }[] = [
+  {
+    id: "motion-graphics-penuh",
+    name: "Motion Graphics — Infografis Penuh",
+    description:
+      "Gaya explainer referensi: ilustrasi vektor memenuhi seluruh layar, angka besar sebagai penanda data (mis. 100 KM, 10x), caption putih dengan kata kunci berwarna aksen.",
+    spec: MOTION_GRAPHICS_FULL,
+  },
   {
     id: "motion-graphics",
     name: "Motion Graphics — Ink & Lime",
@@ -266,13 +280,6 @@ export const PRESETS: { id: string; name: string; description: string; spec: Sty
       hud: { ...MOTION_GRAPHICS.hud, labelColor: "#1F8A7A", clockColor: "#12171D", episodeColor: "#12171D" },
       subtitle: { ...MOTION_GRAPHICS.subtitle, fill: "#12171D", emphasisColor: "#1F8A7A" },
     },
-  },
-  {
-    id: "motion-graphics-penuh",
-    name: "Motion Graphics — Infografis Penuh",
-    description:
-      "Gaya explainer referensi: ilustrasi vektor memenuhi seluruh layar, angka besar sebagai penanda data (mis. 100 KM, 10x), caption putih dengan kata kunci berwarna aksen.",
-    spec: MOTION_GRAPHICS_FULL,
   },
   {
     id: "stickman-dramatis",

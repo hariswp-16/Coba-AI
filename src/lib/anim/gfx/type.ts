@@ -13,6 +13,13 @@ export interface CaptionOpts {
   theme: GfxTheme;
   /** hide the fade-out so static previews never catch a half-transparent chunk */
   noFade?: boolean;
+  /**
+   * Keep every word at full ink strength. The paper layout dims words that
+   * were already spoken, but on a full-bleed illustration that dimming just
+   * drops the caption into the picture — the reference reel keeps its type
+   * pure white and lets the keywords carry the colour.
+   */
+  keepInk?: boolean;
 }
 
 interface Line {
@@ -50,6 +57,24 @@ function layoutWords(
     }
   }
   if (line.words.length) lines.push(line);
+  // Avoid a one-word widow: with three-word chunks the last word often spills
+  // onto its own line, so pull a word down when the pair still fits.
+  if (lines.length > 1) {
+    const last = lines[lines.length - 1];
+    const prev = lines[lines.length - 2];
+    if (last.words.length === 1 && prev.words.length > 1) {
+      const idx = prev.words.length - 1;
+      const movedW = prev.widths[idx];
+      if (last.width + space + movedW <= maxWidth) {
+        const w = prev.words.pop()!;
+        prev.widths.pop();
+        prev.width -= space + movedW;
+        last.words.unshift(w);
+        last.widths.unshift(movedW);
+        last.width += space + movedW;
+      }
+    }
+  }
   return lines;
 }
 
@@ -129,7 +154,7 @@ export function drawCaption(ctx: Ctx, o: CaptionOpts) {
           ? colourMode
             ? theme.accent
             : theme.onAccent
-          : active
+          : o.keepInk || active
             ? theme.ink
             : mix(theme.ink, theme.mute, spoken ? 0.45 : 0.18);
         ctx.fillStyle = ink;
@@ -138,9 +163,17 @@ export function drawCaption(ctx: Ctx, o: CaptionOpts) {
           ctx.shadowBlur = fontSize * 0.35;
         }
         if (style.emphasisStyle === "color" && style.shadow > 0) {
-          ctx.shadowColor = alpha("#000000", 0.55);
-          ctx.shadowBlur = fontSize * style.shadow;
+          ctx.shadowColor = alpha("#000000", o.keepInk ? 0.6 : 0.55);
+          ctx.shadowBlur = fontSize * (o.keepInk ? Math.max(style.shadow, 0.42) : style.shadow);
           ctx.shadowOffsetY = fontSize * 0.05;
+        }
+        // Over a full-bleed illustration the caption has no paper behind it, so
+        // a thin dark keyline keeps white type legible on bright skies too.
+        if (o.keepInk) {
+          ctx.lineWidth = fontSize * 0.07;
+          ctx.lineJoin = "round";
+          ctx.strokeStyle = alpha("#000000", 0.34);
+          ctx.strokeText(text, x, y);
         }
         ctx.fillText(text, x, y);
         ctx.shadowBlur = 0;

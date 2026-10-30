@@ -104,6 +104,10 @@ export async function renderVideoTrack(o: FrameRenderOptions, outPath: string): 
       }))
     ).map((motif, i) => [scenes[i].id, motif] as const)
   );
+  // an explicit `gfxMotif` on the scene always wins over the auto planner
+  for (const s of scenes) {
+    if (s.gfxMotif) motifByScene.set(s.id, s.gfxMotif as ReturnType<typeof planMotifs>[number]);
+  }
 
   const images = new Map<string, import("@napi-rs/canvas").Image | null>();
   if (o.imagesByScene) {

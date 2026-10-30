@@ -1,7 +1,14 @@
 import { z } from "zod";
 import { guard, jsonOk, jsonError, parseBody, errorMessage } from "@/lib/api";
 import { insertStyle, listStyles, getStyle } from "@/lib/db/repo";
-import { PRESETS } from "@/lib/style/presets";
+import { DEFAULT_STYLE_PRESET, PRESETS } from "@/lib/style/presets";
+
+/** The house style always leads the list, so "first" means "default". */
+const DEFAULT_STYLE_NAME = PRESETS.find((p) => p.id === DEFAULT_STYLE_PRESET)?.name ?? "";
+
+function defaultFirst(styles: { name: string }[]) {
+  return [...styles].sort((a, b) => Number(b.name === DEFAULT_STYLE_NAME) - Number(a.name === DEFAULT_STYLE_NAME));
+}
 import type { StyleProfileSpec } from "@/lib/types";
 
 export async function GET() {
@@ -21,9 +28,9 @@ export async function GET() {
         spec: preset.spec,
       });
     }
-    return jsonOk(listStyles());
+    return jsonOk(defaultFirst(listStyles()));
   }
-  return jsonOk(styles);
+  return jsonOk(defaultFirst(styles));
 }
 
 const schema = z.object({

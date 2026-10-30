@@ -2,7 +2,7 @@ import { z } from "zod";
 import { guard, jsonOk, jsonError, parseBody, errorMessage } from "@/lib/api";
 import { createProject, listProjects, getStyle, insertStyle, updateProject } from "@/lib/db/repo";
 import { RESOLUTIONS } from "@/lib/types";
-import { STICKMAN_CINEMATIC, getPreset } from "@/lib/style/presets";
+import { DEFAULT_STYLE_PRESET, STICKMAN_CINEMATIC, getPreset } from "@/lib/style/presets";
 
 const bodySchema = z.object({
   title: z.string().min(1).max(140),
@@ -61,10 +61,11 @@ export async function POST(req: Request) {
   try {
     let style = getStyle(body.styleProfileId);
     if (!style) {
-      const preset = getPreset("stickman-dramatis");
+      // fall back to the house look rather than failing the create
+      const preset = getPreset(DEFAULT_STYLE_PRESET);
       const id = insertStyle({
-        name: "Stickman Sinematik — Dramatis Malam",
-        description: "Dibuat otomatis dari preset bawaan.",
+        name: "Motion Graphics — Infografis Penuh",
+        description: "Dibuat otomatis dari preset bawaan studio.",
         source: "preset",
         isTemplate: true,
         referenceAssetId: null,

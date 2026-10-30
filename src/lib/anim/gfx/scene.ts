@@ -91,8 +91,8 @@ function renderFullFrame(ctx: Ctx, spec: SceneRenderSpec, tMs: number): GfxResul
 
   const bottom = ctx.createLinearGradient(0, h * 0.52, 0, h);
   bottom.addColorStop(0, alpha("#000000", 0));
-  bottom.addColorStop(0.5, alpha("#000000", 0.34));
-  bottom.addColorStop(1, alpha("#000000", 0.74));
+  bottom.addColorStop(0.5, alpha("#000000", 0.4));
+  bottom.addColorStop(1, alpha("#000000", 0.84));
   ctx.fillStyle = bottom;
   ctx.fillRect(0, h * 0.52, w, h * 0.48);
 
@@ -162,7 +162,7 @@ function renderFullFrame(ctx: Ctx, spec: SceneRenderSpec, tMs: number): GfxResul
     if (e > 0.01) {
       const valueSize = Math.round(112 * s);
       const pool = ctx.createRadialGradient(w / 2, h * 0.26, 10 * s, w / 2, h * 0.26, h * 0.19);
-      pool.addColorStop(0, alpha("#000000", 0.3 * e));
+      pool.addColorStop(0, alpha("#000000", 0.34 * e));
       pool.addColorStop(1, alpha("#000000", 0));
       ctx.fillStyle = pool;
       ctx.fillRect(0, h * 0.06, w, h * 0.4);
@@ -184,8 +184,12 @@ function renderFullFrame(ctx: Ctx, spec: SceneRenderSpec, tMs: number): GfxResul
       const labelText = spec.stat.label.toUpperCase();
       ctx.font = `700 ${Math.round(20 * s)}px Poppins`;
       ctx.letterSpacing = `${4 * s}px`;
-      ctx.fillStyle = alpha(ink, 0.9);
+      ctx.fillStyle = alpha(ink, 0.92);
+      ctx.shadowColor = alpha("#000000", 0.5);
+      ctx.shadowBlur = 18 * s;
       ctx.fillText(labelText, 0, 32 * s);
+      ctx.shadowColor = "transparent";
+      ctx.shadowBlur = 0;
       ctx.letterSpacing = "0px";
       ctx.textAlign = "left";
       ctx.restore();
@@ -425,6 +429,7 @@ export function renderGfxFrame(ctx: Ctx, spec: SceneRenderSpec, tMs: number): Gf
       style: spec.subtitleStyle,
       theme,
       noFade: spec.subtitleNoFade,
+      keepInk: true,
     });
     subtitleActive = spec.words.some((word) => tMs >= word.startMs - 90 && tMs <= word.endMs + 240);
   }

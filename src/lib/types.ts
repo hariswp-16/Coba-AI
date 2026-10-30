@@ -262,6 +262,8 @@ export interface Scene {
   ctaQuestion?: string;
   /** big number callout, e.g. { value: "100 KM", label: "TEBAL ATMOSFER" } */
   stat?: { value: string; label: string };
+  /** forces a specific full-bleed illustration instead of the auto planner */
+  gfxMotif?: string;
   words: SceneWord[];
   audioAssetId?: string | null;
   imageAssetId?: string | null;

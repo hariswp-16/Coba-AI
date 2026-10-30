@@ -25,10 +25,10 @@ const demo = (text: string, startMs: number, perWord = 420, emphasis: string[] =
   }));
 
 const scenes = [
-  { name: "hook", motif: "sky", stat: { value: "100 KM", label: "TEBAL ATMOSFER" }, narration: "Kenapa langit kita biru", emph: ["biru"], tod: "siang" as const },
-  { name: "prisma", motif: "prism", stat: { value: "7", label: "WARNA DALAM CAHAYA PUTIH" }, narration: "Putih itu campuran semua warna", emph: ["semua"], tod: "siang" as const },
-  { name: "kuat", motif: "sky", stat: { value: "10×", label: "BIRU LEBIH KUAT DARI MERAH" }, narration: "Biru hampir sepuluh kali lebih kuat", emph: ["sepuluh"], tod: "siang" as const },
-  { name: "senja", motif: "sunset", stat: { value: "38×", label: "JALUR CAHAYA SAAT SENJA" }, narration: "Saat senja jalurnya jauh lebih panjang", emph: ["panjang"], tod: "sore" as const },
+  { name: "rain", motif: "rain", stat: { value: "30 KM/JAM", label: "KECEPATAN TETES HUJAN" }, narration: "Hujan bukan air yang baru jatuh dari langit", emph: ["langit"], tod: "sore" as const },
+  { name: "evap", motif: "evaporation", stat: { value: "71%", label: "PERMUKAAN BUMI ADALAH AIR" }, narration: "Semua mulai dari laut dan matahari memanaskannya", emph: ["laut"], tod: "siang" as const },
+  { name: "cloud", motif: "cloud", stat: { value: "1 JUTA", label: "TETES KECIL UNTUK SATU TETES HUJAN" }, narration: "Uap menempel pada debu lalu miliaran tetes lahir", emph: ["debu"], tod: "siang" as const },
+  { name: "hills", motif: "hills", stat: undefined as { value: string; label: string } | undefined, narration: "Udara terpaksa naik mendingin dan awan menebal", emph: ["menebal"], tod: "sore" as const },
 ];
 
 async function main() {

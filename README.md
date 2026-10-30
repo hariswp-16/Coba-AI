@@ -95,6 +95,24 @@ Lihat `.env.example` untuk daftar lengkap.
    real-time (tahap, persentase, log).
 5. **Dashboard** (`/`) — semua proyek, status, durasi, unduh MP4/SRT.
 
+## Gaya rumahan (house style)
+
+Semua video baru memakai preset **Motion Graphics — Infografis Penuh**
+(`DEFAULT_STYLE_PRESET` di `src/lib/style/presets.ts`, otomatis jadi pilihan pertama
+di `/api/styles` dan saat proyek dibuat tanpa gaya). Aturannya:
+
+- **9:16, layar penuh.** Ilustrasi vektor menutup seluruh frame, tanpa kartu dan tanpa margin kertas.
+- **Caption 3 kata per potongan**, putih penuh, satu kata kunci berwarna koral `#FF6B3D`.
+  Kata yang sudah diucapkan tidak diredupkan (`keepInk`) dan diberi garis luar tipis supaya tetap
+  terbaca di langit terang maupun di hujan gelap.
+- **Satu angka besar per adegan** (`scene.stat`) di sepertiga atas, label kecil di bawahnya.
+- **Gerak terus-menerus** — kamera *slow push* dan motif yang bergerak sendiri; transisi `dissolve`.
+- **8 adegan / 60–90 detik**: hook → setup → konflik → klimaks → resolusi → CTA
+  (CTA berisi pertanyaan + dua pil pilihan episode berikutnya).
+- **Motif sains** yang siap pakai: `sky`, `prism`, `sunset`, `molecules`, `rain`, `cloud`,
+  `evaporation`, `hills`. Pilih eksplisit lewat `scene.gfxMotif` (JSON `/api/projects/[id]`)
+  atau biarkan planner otomatis menebak dari lokasi/cuaca/narasi.
+
 ## Analisis video referensi
 
 `src/lib/style/analyze.ts`
