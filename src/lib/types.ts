@@ -86,6 +86,12 @@ export interface CharacterSpec {
 
 export interface StyleProfileSpec {
   version: 1;
+  /**
+   * Which frame renderer this style uses.
+   * - "stickman"   illustrated character stage (default)
+   * - "motiongfx"  flat vector motion graphics with kinetic typography
+   */
+  renderer?: "stickman" | "motiongfx";
   aspect: AspectRatio;
   width: number;
   height: number;

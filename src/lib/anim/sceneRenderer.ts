@@ -9,6 +9,7 @@ import { drawAtmosphere } from "./atmosphere";
 import { applyCamera, cameraAt, type CameraMove } from "./camera";
 import { drawHud, drawChoicePills, hudClockFor, type HudData } from "./hud";
 import { drawSubtitle } from "./subtitle";
+import { renderGfxFrame } from "./gfx/scene";
 import { applyGrade, radialGlow } from "./geometry";
 
 export interface StageCharacter {
@@ -55,6 +56,10 @@ export interface SceneRenderSpec {
   /** Static preview frames render subtitles fully opaque (no crossfade). */
   subtitleNoFade?: boolean;
   showSubtitles?: boolean;
+  /** how many scenes the story has, so the counter can read "02 / 04" */
+  sceneCount?: number;
+  /** motion-graphics illustration chosen for this scene by the story plan */
+  gfxMotif?: string;
 }
 
 interface Prepared {
@@ -117,6 +122,14 @@ export interface FrameResult {
 
 /** Renders a complete frame (background, characters, atmosphere, subtitle, HUD) into ctx. */
 export function renderSceneFrame(ctx: Ctx, spec: SceneRenderSpec, tMs: number): FrameResult {
+  if (spec.style.renderer === "motiongfx") {
+    const gfx = renderGfxFrame(ctx, spec, tMs);
+    return { headRects: [], subtitleActive: gfx.subtitleActive };
+  }
+  return renderIllustratedFrame(ctx, spec, tMs);
+}
+
+function renderIllustratedFrame(ctx: Ctx, spec: SceneRenderSpec, tMs: number): FrameResult {
   const { width: w, height: h } = spec;
   const p = clamp(tMs / Math.max(1, spec.durationMs), 0, 1);
   const seed = hashString(spec.seedKey);

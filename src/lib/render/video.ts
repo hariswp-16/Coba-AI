@@ -6,6 +6,7 @@ import { createCanvas, type Canvas } from "@napi-rs/canvas";
 import { ffmpegPath, runFfmpeg } from "../ffmpeg";
 import { ensureFonts } from "./fonts";
 import { renderSceneFrame, resetMotionState, type SceneRenderSpec, type StageCharacter } from "../anim/sceneRenderer";
+import { planMotifs } from "../anim/gfx/motifs";
 import { buildTimeline, transitionWindows, type TimedScene } from "./timeline";
 import type { CharacterSpec, Scene, StoryDoc, StyleProfileSpec, SubtitleStyle, HudStyle } from "../types";
 import { hashString, clamp, smoothstep, mulberry32 } from "../anim/geometry";
@@ -35,7 +36,12 @@ export interface FrameRenderResult {
   elapsedMs: number;
 }
 
-function sceneSpec(o: FrameRenderOptions, scene: TimedScene, image: import("@napi-rs/canvas").Image | null): SceneRenderSpec {
+function sceneSpec(
+  o: FrameRenderOptions,
+  scene: TimedScene,
+  image: import("@napi-rs/canvas").Image | null,
+  motif?: string
+): SceneRenderSpec {
   return {
     index: scene.index,
     width: o.width,
@@ -61,6 +67,8 @@ function sceneSpec(o: FrameRenderOptions, scene: TimedScene, image: import("@nap
     ctaQuestion: scene.purpose === "cta" ? "APA PILIHANMU?" : undefined,
     image,
     showSubtitles: true,
+    sceneCount: o.story.scenes.length,
+    gfxMotif: motif,
   };
 }
 
@@ -83,6 +91,18 @@ export async function renderVideoTrack(o: FrameRenderOptions, outPath: string): 
   });
   const scenes = timeline.scenes;
   const windows = transitionWindows(scenes, 380);
+  // one illustration per scene, no two consecutive shots alike
+  const motifByScene = new Map(
+    planMotifs(
+      scenes.map((s) => ({
+        location: s.location,
+        timeOfDay: s.timeOfDay,
+        weather: s.weather,
+        purpose: s.purpose,
+        seed: hashString(`${s.id}-${s.location}`),
+      }))
+    ).map((motif, i) => [scenes[i].id, motif] as const)
+  );
 
   const images = new Map<string, import("@napi-rs/canvas").Image | null>();
   if (o.imagesByScene) {
@@ -176,14 +196,14 @@ export async function renderVideoTrack(o: FrameRenderOptions, outPath: string): 
       if (!sceneA) break;
 
       const tA = clamp(t - sceneA.startMs, 0, sceneA.durationMs);
-      renderSceneFrame(baseCtx, sceneSpec(o, sceneA, images.get(sceneA.id) ?? null), tA);
+      renderSceneFrame(baseCtx, sceneSpec(o, sceneA, images.get(sceneA.id) ?? null, motifByScene.get(sceneA.id)), tA);
 
       if (win && sceneB) {
         const p = smoothstep((t - win.startMs) / Math.max(1, win.endMs - win.startMs));
         const tB = clamp(t - sceneB.startMs, 0, sceneB.durationMs);
         blendCtx.save();
         blendCtx.clearRect(0, 0, o.width, o.height);
-        renderSceneFrame(blendCtx, sceneSpec(o, sceneB, images.get(sceneB.id) ?? null), tB);
+        renderSceneFrame(blendCtx, sceneSpec(o, sceneB, images.get(sceneB.id) ?? null, motifByScene.get(sceneB.id)), tB);
         blendCtx.restore();
         baseCtx.save();
         if (win.type === "whip") {

@@ -166,7 +166,77 @@ export const STICKMAN_CINEMATIC: StyleProfileSpec = {
   },
 };
 
+const MOTION_PALETTE_DARK = {
+  background: "#0A0D12",
+  wall: "#151C26",
+  floor: "#1E2733",
+  accent: "#FF7A45",
+  lampWarm: "#FFC46B",
+  shadow: "#05070A",
+  text: "#F4F1E8",
+  highlight: "#D4F24A",
+};
+
+const MOTION_PALETTE_LIGHT = {
+  background: "#F6F2E7",
+  wall: "#E8DFCC",
+  floor: "#D9CEB8",
+  accent: "#E4572E",
+  lampWarm: "#FFB86B",
+  shadow: "#C9BFA9",
+  text: "#12171D",
+  highlight: "#1F8A7A",
+};
+
+/**
+ * Motion-graphics look: flat vector illustration + kinetic typography, no
+ * characters at all. The renderer is procedural, so these videos cost nothing
+ * to generate beyond CPU time.
+ */
+export const MOTION_GRAPHICS: StyleProfileSpec = {
+  ...STICKMAN_CINEMATIC,
+  renderer: "motiongfx",
+  palette: MOTION_PALETTE_DARK,
+  characterStyle: {
+    ...STICKMAN_CINEMATIC.characterStyle,
+    description: "Tidak dipakai: gaya ini merender bentuk vektor dan tipografi, bukan karakter.",
+  },
+  lighting: { ...STICKMAN_CINEMATIC.lighting, mood: "grafis, kontras tinggi, bersih", vignette: 0.4, grain: 0.32 },
+  background: { style: "ilustrasi vektor datar: kota, jendela, sumur, pintu, masjid, bukit", detailLevel: 0.6, depthLayers: 3 },
+  subtitle: {
+    ...STICKMAN_CINEMATIC.subtitle,
+    fontSize: 54,
+    wordsPerChunk: 3,
+    positionY: 0.72,
+  },
+  hud: { ...STICKMAN_CINEMATIC.hud, labelText: "MALAM MENCEKAM" },
+  graphics: {
+    ...STICKMAN_CINEMATIC.graphics,
+    notes: "Chip babak, penghitung adegan, progress bar tipis, timecode berjalan, dan tipografi kinetik per kata.",
+  },
+};
+
 export const PRESETS: { id: string; name: string; description: string; spec: StyleProfileSpec }[] = [
+  {
+    id: "motion-graphics",
+    name: "Motion Graphics — Ink & Lime",
+    description:
+      "Grafis gerak vektor datar: ilustrasi flat beranimasi (kota, jendela, sumur, masjid), tipografi kinetik per kata, chip babak + progress bar. Tanpa karakter, tanpa biaya API.",
+    spec: MOTION_GRAPHICS,
+  },
+  {
+    id: "motion-graphics-terang",
+    name: "Motion Graphics — Kertas Terang",
+    description:
+      "Motion graphics versi terang: latar kertas krem, tinta gelap, aksen teal dan jingga. Cocok untuk cerita siang atau konten edukasi.",
+    spec: {
+      ...MOTION_GRAPHICS,
+      palette: MOTION_PALETTE_LIGHT,
+      lighting: { ...MOTION_GRAPHICS.lighting, colorTemp: "hangat", vignette: 0.18, grain: 0.28 },
+      hud: { ...MOTION_GRAPHICS.hud, labelColor: "#1F8A7A", clockColor: "#12171D", episodeColor: "#12171D" },
+      subtitle: { ...MOTION_GRAPHICS.subtitle, fill: "#12171D", emphasisColor: "#1F8A7A" },
+    },
+  },
   {
     id: "stickman-dramatis",
     name: "Stickman Sinematik — Dramatis Malam",

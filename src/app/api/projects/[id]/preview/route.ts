@@ -5,8 +5,10 @@ import { createCanvas } from "@napi-rs/canvas";
 import { ensureFonts } from "@/lib/render/fonts";
 import { sceneStaging } from "@/lib/render/video";
 import { buildTimeline } from "@/lib/render/timeline";
+import { planMotifs } from "@/lib/anim/gfx/motifs";
 import { buildShortLabel } from "@/lib/story/labels";
 import { hudClockFor } from "@/lib/anim/hud";
+import { hashString } from "@/lib/anim/geometry";
 import type { SceneWord, SubtitleStyle } from "@/lib/types";
 
 /**
@@ -48,6 +50,17 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     ? scene.words
     : distributePreviewWords(scene.narration, scene.emphasisWords ?? [], spreadMs);
 
+  // same illustration plan the final render uses, so the preview never lies
+  const motifForPreview = planMotifs(
+    timeline.scenes.map((s) => ({
+      location: s.location,
+      timeOfDay: s.timeOfDay,
+      weather: s.weather,
+      purpose: s.purpose,
+      seed: hashString(`${s.id}-${s.location}`),
+    }))
+  )[sceneIndex];
+
   ensureFonts();
   const canvas = createCanvas(width, height);
   const cctx = canvas.getContext("2d") as never;
@@ -79,6 +92,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     purpose: scene.purpose,
     ctaPills: scene.purpose === "cta" ? ["MENYUSUL TEMANMU", "BAWA ADIK PULANG"] : undefined,
     ctaQuestion: scene.purpose === "cta" ? "APA PILIHANMU?" : undefined,
+    sceneCount: project.story.scenes.length,
+    gfxMotif: motifForPreview,
   };
   renderSceneFrame(cctx, spec, tMs);
 
